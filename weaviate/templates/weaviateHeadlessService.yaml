@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}-headless
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: weaviate
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: {{ .Values.env.CLUSTER_GOSSIP_BIND_PORT }}
+  publishNotReadyAddresses: true

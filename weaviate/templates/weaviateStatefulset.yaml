@@ -1,0 +1,528 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: weaviate
+  labels:
+    name: weaviate
+    app: weaviate
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicas }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  updateStrategy:
+{{ toYaml .Values.updateStrategy | indent 4}}
+  serviceName: {{ .Values.service.name }}-headless
+  selector:
+    matchLabels:
+      app: weaviate
+  template:
+    metadata:
+      labels:
+        app: weaviate
+        app.kubernetes.io/name: weaviate
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+      annotations:
+        # To restart Pods if the ConfigMap is updated.
+        checksum/config: {{ include (print $.Template.BasePath "/weaviateConfigMap.yaml") . | sha256sum }}
+        {{- with .Values.annotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext:
+{{ toYaml .Values.securityContext | indent 8}}
+      {{- if (index .Values "serviceAccountName") }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- else if and (index .Values "backups" "s3" "enabled") (index .Values "backups" "s3" "serviceAccountName") }} # for backwards compatibility
+      serviceAccountName: {{ .Values.backups.s3.serviceAccountName }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- include "image.pullSecrets" (dict "pullSecrets" $.Values.image.pullSecrets) | nindent 6 }}
+      {{- include "pod.priorityClassName" ( dict "global" $.Values.globalPriorityClassName "priorityClassName" .Values.priorityClassName) | nindent 6 }}
+      {{- if or (.Values.initContainers.sysctlInitContainer.enabled) (.Values.initContainers.extraInitContainers) }}
+      initContainers:
+      {{- if .Values.initContainers.sysctlInitContainer.enabled }}
+      {{- with .Values.initContainers.sysctlInitContainer }}
+      - name: configure-sysctl
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        image: "{{ .image.registry }}/{{ .image.repo }}:{{ .image.tag }}"
+        imagePullPolicy: "{{ .image.pullPolicy }}"
+        command: ["sysctl", "-w", "vm.max_map_count={{ .sysctlVmMaxMapCount }}", "vm.overcommit_memory=1"]
+      {{- end }}
+      {{- end }}
+      {{- if .Values.initContainers.ensureFileOwnershipContainer.enabled }}
+      {{- if and .Values.containerSecurityContext .Values.containerSecurityContext.runAsUser .Values.containerSecurityContext.fsGroup }}
+      - name: ensure-file-ownership
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        image: "{{ .Values.image.registry }}/{{ .Values.image.repo }}:{{ .Values.image.tag }}"
+        imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+        command: ["chown", "-R", "{{ .Values.containerSecurityContext.runAsUser }}:{{ .Values.containerSecurityContext.fsGroup }}", "/var/lib/weaviate"]
+        volumeMounts:
+          - name: weaviate-data
+            mountPath: /var/lib/weaviate
+      {{- end }}
+      {{- end }}
+      {{- if .Values.initContainers.extraInitContainers }}
+{{ toYaml .Values.initContainers.extraInitContainers | indent 6 }}
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: weaviate
+        image: '{{ .Values.image.registry }}/{{ .Values.image.repo }}:{{ .Values.image.tag }}'
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.command }}
+        command: {{ toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.args }}
+        args: {{ toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        env:
+        {{- if or $.Values.env $.Values.envSecrets }}
+          {{- range $key, $value := $.Values.env }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+          {{- end }}
+          {{- range $key, $secret := $.Values.envSecrets }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+          {{- end }}
+          {{- end }}
+          - name: CLUSTER_BASIC_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-cluster-api-basic-auth
+                key: username
+          - name: CLUSTER_BASIC_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-cluster-api-basic-auth
+                key: password
+          - name: PERSISTENCE_DATA_PATH
+            value: '/var/lib/weaviate'
+          - name: DEFAULT_VECTORIZER_MODULE
+            value: {{ index .Values "modules" "default_vectorizer_module" | trim }}
+          {{ template "enabled_modules" . }}
+          {{ template "raft_configuration" . }}
+          {{- if index .Values "modules" "text2vec-transformers" "enabled" }}
+          - name: TRANSFORMERS_INFERENCE_API
+            value: http://{{ index .Values "modules" "text2vec-transformers" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "text2vec-transformers" "inferenceUrl" }}
+          - name: TRANSFORMERS_INFERENCE_API
+            value: {{ index .Values "modules" "text2vec-transformers" "inferenceUrl" }}
+          {{- else }}
+              {{- if index .Values "modules" "text2vec-transformers" "passageQueryServices" "passage" "enabled" }}
+          - name: TRANSFORMERS_PASSAGE_INFERENCE_API
+            value: http://{{ index .Values "modules" "text2vec-transformers" "passageQueryServices" "passage" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+              {{- else if index .Values "modules" "text2vec-transformers" "passageQueryServices" "passage" "inferenceUrl" }}
+          - name: TRANSFORMERS_PASSAGE_INFERENCE_API
+            value: {{ index .Values "modules" "text2vec-transformers" "passageQueryServices" "passage" "inferenceUrl" }}
+              {{- end }}
+              {{- if index .Values "modules" "text2vec-transformers" "passageQueryServices" "query" "enabled" }}
+          - name: TRANSFORMERS_QUERY_INFERENCE_API
+            value: http://{{ index .Values "modules" "text2vec-transformers" "passageQueryServices" "query" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+              {{- else if index .Values "modules" "text2vec-transformers" "passageQueryServices" "query" "inferenceUrl" }}
+          - name: TRANSFORMERS_QUERY_INFERENCE_API
+            value: {{ index .Values "modules" "text2vec-transformers" "passageQueryServices" "query" "inferenceUrl" }}
+              {{- end }}
+          {{- end }}
+          {{- if index .Values "modules" "text2vec-gpt4all" "enabled" }}
+          - name: GPT4ALL_INFERENCE_API
+            value: http://{{ index .Values "modules" "text2vec-gpt4all" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "text2vec-gpt4all" "inferenceUrl" }}
+          - name: GPT4ALL_INFERENCE_API
+            value: {{ index .Values "modules" "text2vec-gpt4all" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "multi2vec-clip" "enabled" }}
+          - name: CLIP_INFERENCE_API
+            value: http://{{ index .Values "modules" "multi2vec-clip" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "multi2vec-clip" "inferenceUrl" }}
+          - name: CLIP_INFERENCE_API
+            value: {{ index .Values "modules" "multi2vec-clip" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "multi2vec-bind" "enabled" }}
+          - name: BIND_INFERENCE_API
+            value: http://{{ index .Values "modules" "multi2vec-bind" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "multi2vec-bind" "inferenceUrl" }}
+          - name: BIND_INFERENCE_API
+            value: {{ index .Values "modules" "multi2vec-bind" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "qna-transformers" "enabled" }}
+          - name: QNA_INFERENCE_API
+            value: http://{{ index .Values "modules" "qna-transformers" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "qna-transformers" "inferenceUrl" }}
+          - name: QNA_INFERENCE_API
+            value: {{ index .Values "modules" "qna-transformers" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "img2vec-neural" "enabled" }}
+          - name: IMAGE_INFERENCE_API
+            value: http://{{ index .Values "modules" "img2vec-neural" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "img2vec-neural" "inferenceUrl" }}
+          - name: IMAGE_INFERENCE_API
+            value: {{ index .Values "modules" "img2vec-neural" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "text-spellcheck" "enabled" }}
+          - name: SPELLCHECK_INFERENCE_API
+            value: http://{{ index .Values "modules" "text-spellcheck" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "text-spellcheck" "inferenceUrl" }}
+          - name: SPELLCHECK_INFERENCE_API
+            value: {{ index .Values "modules" "text-spellcheck" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "ner-transformers" "enabled" }}
+          - name: NER_INFERENCE_API
+            value: http://{{ index .Values "modules" "ner-transformers" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "ner-transformers" "inferenceUrl" }}
+          - name: NER_INFERENCE_API
+            value: {{ index .Values "modules" "ner-transformers" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "sum-transformers" "enabled" }}
+          - name: SUM_INFERENCE_API
+            value: http://{{ index .Values "modules" "sum-transformers" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "sum-transformers" "inferenceUrl" }}
+          - name: SUM_INFERENCE_API
+            value: {{ index .Values "modules" "sum-transformers" "inferenceUrl" }}
+          {{- end }}
+          {{- if index .Values "modules" "reranker-transformers" "enabled" }}
+          - name: RERANKER_INFERENCE_API
+            value: http://{{ index .Values "modules" "reranker-transformers" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080
+          {{- else if index .Values "modules" "reranker-transformers" "inferenceUrl" }}
+          - name: RERANKER_INFERENCE_API
+            value: {{ index .Values "modules" "reranker-transformers" "inferenceUrl" }}
+          {{- end }}
+          {{ if or (and (index .Values "modules" "text2vec-openai" "enabled") (index .Values "modules" "text2vec-openai" "apiKey")) (and (index .Values "modules" "qna-openai" "enabled") (index .Values "modules" "qna-openai" "apiKey")) (and (index .Values "modules" "generative-openai" "enabled") (index .Values "modules" "generative-openai" "apiKey")) }}
+          - name: OPENAI_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-openai
+                key: apiKey
+          {{- end  }}
+          {{ if or (and (index .Values "modules" "text2vec-openai" "enabled") (index .Values "modules" "text2vec-openai" "azureApiKey")) (and (index .Values "modules" "qna-openai" "enabled") (index .Values "modules" "qna-openai" "azureApiKey")) (and (index .Values "modules" "generative-openai" "enabled") (index .Values "modules" "generative-openai" "azureApiKey")) }}
+          - name: AZURE_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-openai
+                key: apiKey
+          {{- end  }}
+          {{- if and (index .Values "modules" "text2vec-huggingface" "enabled") (index .Values "modules" "text2vec-huggingface" "apiKey") }}
+          - name: HUGGINGFACE_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-huggingface
+                key: apiKey
+          {{- end  }}
+          {{- if or (and (index .Values "modules" "text2vec-cohere" "enabled") (index .Values "modules" "text2vec-cohere" "apiKey")) (and (index .Values "modules" "generative-cohere" "enabled") (index .Values "modules" "generative-cohere" "apiKey")) (and (index .Values "modules" "reranker-cohere" "enabled") (index .Values "modules" "reranker-cohere" "apiKey")) }}
+          - name: COHERE_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-cohere
+                key: apiKey
+          {{- end  }}
+          {{- if or (and (index .Values "modules" "text2vec-palm" "enabled") (index .Values "modules" "text2vec-palm" "apiKey")) (and (index .Values "modules" "generative-palm" "enabled") (index .Values "modules" "generative-palm" "apiKey")) (and (index .Values "modules" "multi2vec-palm" "enabled") (index .Values "modules" "multi2vec-palm" "apiKey")) }}
+          - name: PALM_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-palm
+                key: apiKey
+          {{- end  }}
+          {{- if or (and (index .Values "modules" "text2vec-jinaai" "enabled") (index .Values "modules" "text2vec-jinaai" "apiKey")) (and (index .Values "modules" "reranker-jinaai" "enabled") (index .Values "modules" "reranker-jinaai" "apiKey")) }}
+          - name: JINAAI_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-jinaai
+                key: apiKey
+          {{- end  }}
+          {{- if or (and (index .Values "modules" "text2vec-voyageai" "enabled") (index .Values "modules" "text2vec-voyageai" "apiKey")) (and (index .Values "modules" "reranker-voyageai" "enabled") (index .Values "modules" "reranker-voyageai" "apiKey")) }}
+          - name: VOYAGEAI_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-voyageai
+                key: apiKey
+          {{- end  }}
+          {{- if and (index .Values "modules" "generative-anyscale" "enabled") (index .Values "modules" "generative-anyscale" "apiKey") }}
+          - name: ANYSCALE_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-anyscale
+                key: apiKey
+          {{- end  }}
+          {{- if and (index .Values "modules" "generative-anthropic" "enabled") (index .Values "modules" "generative-anthropic" "apiKey") }}
+          - name: ANTHROPIC_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-anthropic
+                key: apiKey
+          {{- end  }}
+          {{- if and (index .Values "modules" "generative-mistral" "enabled") (index .Values "modules" "generative-mistral" "apiKey") }}
+          - name: MISTRAL_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-mistral
+                key: apiKey
+          {{- end  }}
+          {{- if or (and (index .Values "modules" "text2vec-octoai" "enabled") (index .Values "modules" "text2vec-octoai" "apiKey")) (and (index .Values "modules" "generative-octoai" "enabled") (index .Values "modules" "generative-octoai" "apiKey")) }}
+          - name: OCTOAI_APIKEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-octoai
+                key: apiKey
+          {{- end  }}
+          {{- if and (index .Values "offload" "s3" "enabled") (index .Values "offload" "s3" "envconfig") }}
+            {{- range $key, $value := index .Values "offload" "s3" "envconfig" }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+            {{- end }}
+          {{- end  }}
+          {{- if and (index .Values "backups" "filesystem" "enabled") (index .Values "backups" "filesystem" "envconfig") }}
+            {{- range $key, $value := index .Values "backups" "filesystem" "envconfig" }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+            {{- end }}
+          {{- end  }}
+          {{- if index .Values "backups" "s3" "enabled" }}
+            {{- if index .Values "backups" "s3" "envconfig" }}
+              {{- range $key, $value := index .Values "backups" "s3" "envconfig" }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+          {{- end  }}
+          {{- if or (index .Values "offload" "s3" "enabled") (index .Values "backups" "s3" "enabled") (index .Values "modules" "text2vec-aws" "enabled") (index .Values "modules" "generative-aws" "enabled") }}
+            {{- if index .Values "offload" "s3" "envSecrets" }}
+              {{- range $key, $secret := $.Values.offload.s3.envSecrets }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+              {{- end }}
+            {{- else if index .Values "backups" "s3" "envSecrets" }}
+              {{- range $key, $secret := $.Values.backups.s3.envSecrets }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+              {{- end }}
+            {{- else if index .Values "modules" "text2vec-aws" "envSecrets" }}
+              {{- range $key, $secret := (index .Values "modules" "text2vec-aws" "envSecrets") }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+              {{- end }}
+            {{- else if index .Values "modules" "generative-aws" "envSecrets" }}
+              {{- range $key, $secret := (index .Values "modules" "generative-aws" "envSecrets") }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if and (index .Values "backups" "s3" "secrets") (index .Values "backups" "s3" "secrets" "AWS_ACCESS_KEY_ID") }}
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: backup-s3
+                key: AWS_ACCESS_KEY_ID
+            {{- else if or (and (index .Values "offload" "s3" "secrets") (index .Values "offload" "s3" "secrets" "AWS_ACCESS_KEY_ID")) (and (index .Values "modules" "text2vec-aws" "secrets") (index .Values "modules" "text2vec-aws" "secrets" "AWS_ACCESS_KEY_ID")) (and (index .Values "modules" "generative-aws" "secrets") (index .Values "modules" "generative-aws" "secrets" "AWS_ACCESS_KEY_ID")) }}
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-aws
+                key: AWS_ACCESS_KEY_ID
+            {{- end }}
+            {{- if and (index .Values "backups" "s3" "secrets") (index .Values "backups" "s3" "secrets" "AWS_SECRET_ACCESS_KEY") }}
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: backup-s3
+                key: AWS_SECRET_ACCESS_KEY
+            {{- else if or (and (index .Values "offload" "s3" "secrets") (index .Values "offload" "s3" "secrets" "AWS_SECRET_ACCESS_KEY")) (and (index .Values "modules" "text2vec-aws" "secrets") (index .Values "modules" "text2vec-aws" "secrets" "AWS_SECRET_ACCESS_KEY")) (and (index .Values "modules" "generative-aws" "secrets") (index .Values "modules" "generative-aws" "secrets" "AWS_SECRET_ACCESS_KEY")) }}
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: weaviate-aws
+                key: AWS_SECRET_ACCESS_KEY
+            {{- end }}
+          {{- end  }}
+          {{- if index .Values "backups" "gcs" "enabled" }}
+            {{- if index .Values "backups" "gcs" "envconfig" }}
+              {{- range $key, $value := index .Values "backups" "gcs" "envconfig" }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if or (index .Values "backups" "gcs" "secrets") (index .Values "backups" "gcs" "envSecrets") }}
+              {{- if or (index .Values "backups" "gcs" "secrets" "GOOGLE_APPLICATION_CREDENTIALS") (index .Values "backups" "gcs" "envSecrets" "GOOGLE_APPLICATION_CREDENTIALS") }}
+          - name: GOOGLE_APPLICATION_CREDENTIALS
+            value: "/etc/gcp/credentials.json"
+              {{- end }}
+            {{- end }}
+          {{- end  }}
+          {{- if index .Values "backups" "azure" "enabled" }}
+            {{- if index .Values "backups" "azure" "envconfig" }}
+              {{- range $key, $value := index .Values "backups" "azure" "envconfig" }}
+          - name: {{ $key }}
+            value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if index .Values "backups" "azure" "envSecrets" }}
+              {{- range $key, $secret := $.Values.backups.azure.envSecrets }}
+          - name: {{ $key }}
+            valueFrom:
+              secretKeyRef:
+                name: {{ $secret }}
+                key: {{ $key | quote }}
+              {{- end }}
+            {{- end }}
+            {{- if and (index .Values "backups" "azure" "secrets") (index .Values "backups" "azure" "secrets" "AZURE_STORAGE_ACCOUNT") }}
+          - name: AZURE_STORAGE_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: backup-azure
+                key: AZURE_STORAGE_ACCOUNT
+            {{- end }}
+            {{- if and (index .Values "backups" "azure" "secrets") (index .Values "backups" "azure" "secrets" "AZURE_STORAGE_KEY") }}
+          - name: AZURE_STORAGE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: backup-azure
+                key: AZURE_STORAGE_KEY
+            {{- end }}
+            {{- if and (index .Values "backups" "azure" "secrets") (index .Values "backups" "azure" "secrets" "AZURE_STORAGE_CONNECTION_STRING") }}
+          - name: AZURE_STORAGE_CONNECTION_STRING
+            valueFrom:
+              secretKeyRef:
+                name: backup-azure
+                key: AZURE_STORAGE_CONNECTION_STRING
+            {{- end }}
+          {{- end  }}
+          - name: CLUSTER_JOIN
+            value: {{ .Values.service.name }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+        ports:
+          - containerPort: 8080
+          {{- if .Values.env.PROMETHEUS_MONITORING_ENABLED }}
+          - name: metrics
+            containerPort: 2112
+            protocol: TCP
+          {{- end }}
+          {{ if .Values.grpcService.enabled }}
+          - name: grpc
+            containerPort: 50051
+            protocol: TCP
+          {{- end }}
+        volumeMounts:
+          - name: weaviate-config
+            mountPath: /weaviate-config
+          - name: weaviate-data
+            mountPath: /var/lib/weaviate
+          {{- if index .Values "backups" "gcs" "enabled" }}
+            {{- if or (index .Values "backups" "gcs" "secrets") (index .Values "backups" "gcs" "envSecrets") }}
+              {{- if or (index .Values "backups" "gcs" "secrets" "GOOGLE_APPLICATION_CREDENTIALS") (index .Values "backups" "gcs" "envSecrets" "GOOGLE_APPLICATION_CREDENTIALS") }}
+          - name: gcs-service-account-credentials-volume
+            mountPath: /etc/gcp
+            readOnly: true
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{ with .Values.extraVolumeMounts }}
+            {{ toYaml . | nindent 10 }}
+          {{- end }}
+        {{- if .Values.startupProbe.enabled }}
+        startupProbe:
+          {{- $probeType := .Values.startupProbe.probeType }}
+          {{- $probe := index .Values.startupProbe.probe $probeType }}
+          {{ $probeType }}:
+            {{- toYaml $probe | nindent 12 }}
+          initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+          failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          successThreshold: {{ .Values.startupProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+        {{- end }}
+        livenessProbe:
+          {{- $probeType := .Values.livenessProbe.probeType }}
+          {{- $probe := index .Values.livenessProbe.probe $probeType }}
+          {{ $probeType }}:
+            {{- toYaml $probe | nindent 12 }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+        readinessProbe:
+          {{- $probeType := .Values.readinessProbe.probeType }}
+          {{- $probe := index .Values.readinessProbe.probe $probeType }}
+          {{ $probeType }}:
+            {{- toYaml $probe | nindent 12 }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+        securityContext:
+{{ toYaml .Values.containerSecurityContext | indent 10}}
+      volumes:
+        - name: weaviate-config
+          configMap:
+            {{ if .Values.custom_config_map.enabled }}name: {{ .Values.custom_config_map.name }} {{ else }}name: weaviate-config{{ end }}
+        {{- if index .Values "backups" "gcs" "enabled" }}
+          {{- if and (index .Values "backups" "gcs" "secrets") (index .Values "backups" "gcs" "secrets" "GOOGLE_APPLICATION_CREDENTIALS") }}
+        - name: gcs-service-account-credentials-volume
+          secret:
+            secretName: backup-gcs
+            items:
+            - key: GOOGLE_APPLICATION_CREDENTIALS
+              path: credentials.json
+          {{- end }}
+          {{- if and (index .Values "backups" "gcs" "envSecrets") (index .Values "backups" "gcs" "envSecrets" "GOOGLE_APPLICATION_CREDENTIALS") }}
+        - name: gcs-service-account-credentials-volume
+          secret:
+            secretName: {{ index .Values "backups" "gcs" "envSecrets" "GOOGLE_APPLICATION_CREDENTIALS" }}
+            items:
+            - key: GOOGLE_APPLICATION_CREDENTIALS
+              path: credentials.json
+          {{- end }}
+        {{- end }}
+        {{ with .Values.extraVolumes }}
+          {{ toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+
+  volumeClaimTemplates:
+  - metadata:
+      name: weaviate-data
+      labels:
+        app.kubernetes.io/name: weaviate
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.size }}

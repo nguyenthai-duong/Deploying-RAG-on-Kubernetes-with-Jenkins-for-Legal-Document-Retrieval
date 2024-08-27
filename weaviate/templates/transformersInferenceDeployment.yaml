@@ -1,0 +1,278 @@
+{{- $module := index .Values "modules" "text2vec-transformers" -}}
+{{- $passage := index $module "passageQueryServices" "passage" -}}
+{{- $query := index $module "passageQueryServices" "query" -}}
+{{ if index $module "enabled" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ index $module "fullnameOverride" }}
+  labels:
+    name: {{ index $module "fullnameOverride" }}
+    app: {{ index $module "fullnameOverride" }}
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ index $module "replicas" }}
+  strategy:
+{{ toYaml (index $module "strategy") | indent 4}}
+  selector:
+    matchLabels:
+      app: {{ index $module "fullnameOverride" }}
+  template:
+    metadata:
+      labels:
+        app: {{ index $module "fullnameOverride" }}
+    spec:
+      securityContext:
+{{ toYaml (index $module "securityContext") | indent 8}}
+      {{- if (index $module "serviceAccountName") }}
+      serviceAccountName: {{ index $module "serviceAccountName" }}
+      {{- else if (index .Values "serviceAccountName") }}
+      serviceAccountName: {{ index .Values "serviceAccountName" }}
+      {{- end }}
+      {{- include "image.pullSecrets" (dict "pullSecrets" (index $module "imagePullSecrets")) | nindent 6 }}
+      {{- include "pod.priorityClassName" ( dict "global" $.Values.globalPriorityClassName "priorityClassName" (index $module "priorityClassName")) | nindent 6 }}
+      containers:
+      - name: {{ index $module "fullnameOverride" }}
+        image: {{ index $module "registry" }}/{{ index $module "repo" }}:{{ index $module "tag" }}
+        imagePullPolicy: {{ index $module "imagePullPolicy" }}
+        env:
+          - name: ENABLE_CUDA
+            value: "{{ if index $module "envconfig" "enable_cuda" }}1{{ else }}0{{ end }}"
+          {{- if index $module "envconfig" "enable_cuda" }}
+          - name: NVIDIA_VISIBLE_DEVICES
+            value: {{ index $module "envconfig" "nvidia_visible_devices"}}
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: {{ index $module "envconfig" "nvidia_driver_capabilities"}}
+          - name: LD_LIBRARY_PATH
+            value: {{ index $module "envconfig" "ld_library_path"}}
+          {{- end }}
+        resources:
+{{ index $module "resources" | toYaml | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /.well-known/live
+            port: 8080
+          {{- if (index $module "probeInitialDelaySeconds") }}
+          initialDelaySeconds: {{ index $module "probeInitialDelaySeconds" }}
+          {{- else }}
+          initialDelaySeconds: {{ index $module "livenessProbe" "initialDelaySeconds" }}
+          {{- end }}
+          periodSeconds: {{ index $module "livenessProbe" "periodSeconds" }}
+          timeoutSeconds: {{ index $module "livenessProbe" "timeoutSeconds" }}
+        readinessProbe:
+          httpGet:
+            path: /.well-known/ready
+            port: 8080
+          {{- if (index $module "probeInitialDelaySeconds") }}
+          initialDelaySeconds: {{ index $module "probeInitialDelaySeconds" }}
+          {{- else }}
+          initialDelaySeconds: {{ index $module "readinessProbe" "initialDelaySeconds" }}
+          {{- end }}
+          periodSeconds: {{ index $module "readinessProbe" "periodSeconds" }}
+      {{- with index $module "nodeSelector" | default .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $module "affinity" | default .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $module "tolerations" | default .Values.tolerations }}
+      tolerations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ index $module "fullnameOverride" }}
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ index $module "fullnameOverride" }}
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+{{ else }}
+  {{- if index $passage "enabled" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ index $passage "fullnameOverride" }}
+  labels:
+    name: {{ index $passage "fullnameOverride" }}
+    app: {{ index $passage "fullnameOverride" }}
+spec:
+  replicas: {{ index $passage "replicas" }}
+  strategy:
+{{ toYaml (index $passage "strategy") | indent 4}}
+  selector:
+    matchLabels:
+      app: {{ index $passage "fullnameOverride" }}
+  template:
+    metadata:
+      labels:
+        app: {{ index $passage "fullnameOverride" }}
+    spec:
+      securityContext:
+{{ toYaml (index $passage "securityContext") | indent 8}}
+      {{- if (index $passage "serviceAccountName") }}
+      serviceAccountName: {{ index $passage "serviceAccountName" }}
+      {{- else if (index $module "serviceAccountName") }}
+      serviceAccountName: {{ index $module "serviceAccountName" }}
+      {{- else if (index .Values "serviceAccountName") }}
+      serviceAccountName: {{ index .Values "serviceAccountName" }}
+      {{- end }}
+      {{- include "image.pullSecrets" (dict "pullSecrets" (index $passage "imagePullSecrets")) | nindent 6 }}
+      {{- include "pod.priorityClassName" ( dict "global" $.Values.globalPriorityClassName "priorityClassName" (index $passage "priorityClassName")) | nindent 6 }}
+      containers:
+      - name: {{ index $passage "fullnameOverride" }}
+        image: {{ index $passage "registry" }}/{{ index $passage "repo" }}:{{ index $passage "tag" }}
+        imagePullPolicy: {{ index $passage "imagePullPolicy" }}
+        env:
+          - name: ENABLE_CUDA
+            value: "{{ if index $passage "envconfig" "enable_cuda" }}1{{ else }}0{{ end }}"
+          {{- if index $passage "envconfig" "enable_cuda" }}
+          - name: NVIDIA_VISIBLE_DEVICES
+            value: {{ index $passage "envconfig" "nvidia_visible_devices"}}
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: {{ index $passage "envconfig" "nvidia_driver_capabilities"}}
+          - name: LD_LIBRARY_PATH
+            value: {{ index $passage "envconfig" "ld_library_path"}}
+          {{- end }}
+        resources:
+{{ index $passage "resources" | toYaml | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /.well-known/live
+            port: 8080
+          initialDelaySeconds: {{ index $passage "livenessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $passage "livenessProbe" "periodSeconds" }}
+          timeoutSeconds: {{ index $passage "livenessProbe" "timeoutSeconds" }}
+        readinessProbe:
+          httpGet:
+            path: /.well-known/ready
+            port: 8080
+          initialDelaySeconds: {{ index $passage "readinessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $passage "readinessProbe" "periodSeconds" }}
+      {{- with index $passage "nodeSelector" | default .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $passage "affinity" | default .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $passage "tolerations" | default .Values.tolerations }}
+      tolerations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ index $passage "fullnameOverride" }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ index $passage "fullnameOverride" }}
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  {{- end }}
+---    
+  {{- if index $query "enabled" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ index $query "fullnameOverride" }}
+  labels:
+    name: {{ index $query "fullnameOverride" }}
+    app: {{ index $query "fullnameOverride" }}
+spec:
+  replicas: {{ index $query "replicas" }}
+  strategy:
+{{ toYaml (index $query "strategy") | indent 4}}
+  selector:
+    matchLabels:
+      app: {{ index $query "fullnameOverride" }}
+  template:
+    metadata:
+      labels:
+        app: {{ index $query "fullnameOverride" }}
+    spec:
+      securityContext:
+{{ toYaml (index $query "securityContext") | indent 8}}
+      {{- if (index $query "serviceAccountName") }}
+      serviceAccountName: {{ index $query "serviceAccountName" }}
+      {{- else if (index $module "serviceAccountName") }}
+      serviceAccountName: {{ index $module "serviceAccountName" }}
+      {{- else if (index .Values "serviceAccountName") }}
+      serviceAccountName: {{ index .Values "serviceAccountName" }}
+      {{- end }}
+      {{- include "image.pullSecrets" (dict "pullSecrets" (index $query "imagePullSecrets")) | nindent 6 }}
+      {{- include "pod.priorityClassName" ( dict "global" $.Values.globalPriorityClassName "priorityClassName" (index $query "priorityClassName")) | nindent 6 }}
+      containers:
+      - name: {{ index $query "fullnameOverride" }}
+        image: {{ index $query "registry" }}/{{ index $query "repo" }}:{{ index $query "tag" }}
+        imagePullPolicy: {{ index $query "imagePullPolicy" }}
+        env:
+          - name: ENABLE_CUDA
+            value: "{{ if index $query "envconfig" "enable_cuda" }}1{{ else }}0{{ end }}"
+          {{- if index $query "envconfig" "enable_cuda" }}
+          - name: NVIDIA_VISIBLE_DEVICES
+            value: {{ index $query "envconfig" "nvidia_visible_devices"}}
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: {{ index $query "envconfig" "nvidia_driver_capabilities"}}
+          - name: LD_LIBRARY_PATH
+            value: {{ index $query "envconfig" "ld_library_path"}}
+          {{- end }}
+        resources:
+{{ index $query "resources" | toYaml | indent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /.well-known/live
+            port: 8080
+          initialDelaySeconds: {{ index $query "livenessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $query "livenessProbe" "periodSeconds" }}
+          timeoutSeconds: {{ index $query "livenessProbe" "timeoutSeconds" }}
+        readinessProbe:
+          httpGet:
+            path: /.well-known/ready
+            port: 8080
+          initialDelaySeconds: {{ index $query "readinessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $query "readinessProbe" "periodSeconds" }}
+      {{- with index $query "nodeSelector" | default .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $query "affinity" | default .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $query "tolerations" | default .Values.tolerations }}
+      tolerations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ index $query "fullnameOverride" }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ index $query "fullnameOverride" }}
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  {{- end }}
+{{ end }}

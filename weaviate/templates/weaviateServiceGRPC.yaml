@@ -1,0 +1,34 @@
+{{ if .Values.grpcService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.grpcService.name }}
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  {{- with .Values.grpcService.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.grpcService.type }}
+  selector:
+    app: weaviate
+  ports:
+    {{- range .Values.grpcService.ports }}
+    - {{ toYaml . | indent 6 | trim }}
+      targetPort: 50051
+    {{- end }}
+{{ if eq .Values.grpcService.type "ClusterIP" -}}
+  {{ if .Values.grpcService.clusterIP }}
+  clusterIP: {{ .Values.grpcService.clusterIP }}
+  {{ end }}
+{{ end }}
+{{ if eq .Values.grpcService.type "LoadBalancer" -}}
+  {{- if gt (len .Values.grpcService.loadBalancerSourceRanges) 0 }}
+  loadBalancerSourceRanges:
+    {{- range $_, $sourceRange := .Values.grpcService.loadBalancerSourceRanges }}
+    - {{ $sourceRange }}
+    {{ end -}}
+  {{- end -}}
+{{- end }}
+{{ end }}

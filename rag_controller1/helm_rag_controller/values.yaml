@@ -1,0 +1,42 @@
+namespace: rag-controller
+
+ingress: 
+  host: 34.126.70.146.sslip.io
+
+deployment:
+  name: rag-controller
+  replicaCount: 2
+  labels:
+    appName: rag-controller
+  container:
+    name: rag-controller
+    portNumber: 8005
+    args: []
+  image:
+    name: nthaiduong83/rag_controller
+    version: v17
+    imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 800m
+      memory: 2Gi
+
+service:
+  name: rag-svc
+  type: ClusterIP
+  httpPort:
+    enable: true
+    port: 82
+    targetPort: 8005
+
+env:
+  WEAVIATE_URL: http://weaviate.weaviate.svc.cluster.local:85
+  VECTORIZE_URL: http://emb-svc.emb.svc.cluster.local:81/vectorize
+  LLM_API_URL: https://nthaiduong83.serveo.net/generate
+  MAX_NEW_TOKENS: 100
+  TEMPERATURE: 0.5
+  JAEGER_HOST: https://jaeger-tracing-jaeger-all-in-one.jaeger-tracing.svc.cluster.local
+  JAEGER_PORT: 6831
