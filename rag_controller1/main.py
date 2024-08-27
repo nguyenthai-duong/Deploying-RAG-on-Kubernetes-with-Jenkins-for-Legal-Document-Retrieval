@@ -102,13 +102,17 @@ def query_rag_llm(query_str, limit=3):
             messages = qa_template.format_messages(context_str=context_str, query_str=query_str)
             prompt = messages[0].content
 
-            response = requests.post(LLM_API_URL, json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": MAX_NEW_TOKENS,
-                    "temperature": TEMPERATURE
-                }
-            })
+            response = requests.post(
+                LLM_API_URL,
+                json={
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": MAX_NEW_TOKENS,
+                        "temperature": TEMPERATURE
+                    }
+                },
+                verify=False  # Disable SSL certificate verification
+            )
 
             if response.status_code == 200:
                 response_json = response.json()
