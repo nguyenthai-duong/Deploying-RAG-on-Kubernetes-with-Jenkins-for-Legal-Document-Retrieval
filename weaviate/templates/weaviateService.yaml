@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- if and .Values.env.PROMETHEUS_MONITORING_ENABLED .Values.serviceMonitor.enabled }}
+    monitoring: enabled
+{{- end }}
+  {{- with .Values.service.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: weaviate
+  ports:
+    {{- range .Values.service.ports }}
+    - {{ toYaml . | indent 6 | trim }}
+      targetPort: 8080
+    {{- end }}
+{{ if eq .Values.service.type "ClusterIP" -}}
+  {{ if .Values.service.clusterIP }}
+  clusterIP: {{ .Values.service.clusterIP }}
+  {{ end }}
+{{ end }}
+{{ if eq .Values.service.type "LoadBalancer" -}}
+  {{- if gt (len .Values.service.loadBalancerSourceRanges) 0 }}
+  loadBalancerSourceRanges:
+    {{- range $_, $sourceRange := .Values.service.loadBalancerSourceRanges }}
+    - {{ $sourceRange }}
+    {{ end -}}
+  {{- end -}}
+{{- end }}

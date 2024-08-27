@@ -1,0 +1,7 @@
+apiVersion: v2
+name: text-vectorizer
+description: A Helm chart for deploying the FastAPI text vectorizer
+type: application
+version: 0.1.0
+appVersion: "1.0"
+

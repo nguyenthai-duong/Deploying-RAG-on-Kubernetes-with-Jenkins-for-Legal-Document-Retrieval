@@ -1,0 +1,23 @@
+{{ if not .Values.custom_config_map.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weaviate-config
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  conf.yaml: |-
+    ---
+    authentication:
+      {{ toYaml .Values.authentication | nindent 6 | trim }}
+    authorization:
+      {{ toYaml .Values.authorization | nindent 6 | trim }}
+    {{ if index .Values "modules" "text2vec-contextionary" "enabled" }}
+    contextionary:
+      url: {{ index .Values "modules" "text2vec-contextionary" "fullnameOverride" }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:9999
+    {{ end }}
+    query_defaults:
+      {{ toYaml .Values.query_defaults | nindent 6 | trim }}
+    debug: {{ .Values.debug }}
+{{ end }}
