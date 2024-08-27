@@ -1,7 +1,31 @@
 # **Deploying RAG on K8s with Jenkins for Legal Document Retrival** 
+- [**Deploying RAG on K8s with Jenkins for Legal Document Retrival**](#deploying-rag-on-k8s-with-jenkins-for-legal-document-retrival)
+  - [1. Overview:](#1-overview)
+  - [2. Create GKE Cluster using Terraform](#2-create-gke-cluster-using-terraform)
+  - [3. Deploy serving service manually](#3-deploy-serving-service-manually)
+      - [3.1. Deploy NGINX ingress controller](#31-deploy-nginx-ingress-controller)
+      - [3.2. Deploy the Embedding Model](#32-deploy-the-embedding-model)
+      - [3.3. Deploy the Vector Database](#33-deploy-the-vector-database)
+      - [3.4. Deploy the RAG Controller](#34-deploy-the-rag-controller)
+      - [3.5. Deploy the Indexing Pipeline](#35-deploy-the-indexing-pipeline)
+      - [3.6. Deploy the LLM](#36-deploy-the-llm)
+      - [3.7. Deploy the Data Preprocessing Pipeline](#37-deploy-the-data-preprocessing-pipeline)
+  - [4. Deploy observable service](#4-deploy-observable-service)
+      - [4.1. Tracing with Jaeger \& Opentelemetry](#41-tracing-with-jaeger--opentelemetry)
+      - [4.2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana](#42-monitoring-with-loki-and-prometheus-then-deploy-dashboard-in-grafana)
+  - [5. Create GCE Cluster using Ansible](#5-create-gce-cluster-using-ansible)
+  - [6. Setup Jenkins](#6-setup-jenkins)
+      - [6.1 Connecting with K8s cluster](#61-connecting-with-k8s-cluster)
+      - [6.2 Add dockerhub credential](#62-add-dockerhub-credential)
+      - [6.3 Config Github API usage rate limiting strategy](#63-config-github-api-usage-rate-limiting-strategy)
+      - [6.4 Create Item and Connect Jenkins to GitHub](#64-create-item-and-connect-jenkins-to-github)
+      - [6.5 Set Up a GitHub Webhook to Automatically Deploy on Code Push](#65-set-up-a-github-webhook-to-automatically-deploy-on-code-push)
+  - [7. Demo](#7-demo)
+      - [7.1 Demo Process Ingest Data](#71-demo-process-ingest-data)
+      - [7.1 Demo Process Query](#71-demo-process-query)
 
 
-## **1. Overview:**
+## 1. Overview:
 Retrieval-augmented generation (RAG) systems combine generative AI with information retrieval to provide contextualized answer generation. Building reliable and performant RAG applications at scale is challenging. In this project, I deploy a continuous and highly scalable RAG application on Google Kubernetes Engine (GKE) using CI/CD. This is my first project as a Machine Learning Engineer (MLE), and I learned from [FSDS](https://fullstackdatascience.com/). The image below shows my overall system architecture:
 ![systempipline](images/1_architecture.png)
 
@@ -55,9 +79,9 @@ Retrieval-augmented generation (RAG) systems combine generative AI with informat
 - **weaviate/**: Helm chart for deploying the Weaviate vector database.
 - **notebook.ipynb**: Jupyter notebook for testing components of the RAG system such as the embedding model, vector database, and LLM.
 - **Jenkinsfile**: Defines the CI/CD pipeline for continuous deployment of `rag_controller1`.
-- **llm.sh**: Bash script to create a public domain for the LLM container.
 
-## **2. Create GKE Cluster using Terraform**
+
+## 2. Create GKE Cluster using Terraform
 **1. Create Project in [Google Cloud Platform](https://console.cloud.google.com/) and Enable GKE Standard in [GKE](https://console.cloud.google.com/kubernetes).**
 
 **2. Install gcloud CLI & google-cloud-cli-gke-gcloud-auth-plugin**
@@ -89,9 +113,9 @@ It can takes about 10 minutes for create successfully a GKE cluster. You can see
 + In the [GKE UI](https://console.cloud.google.com/kubernetes/list) you follow instruction gif below to connect GKE cluster:
 ![](images/3_gkeconnect.gif)
 
-## 2. Deploy serving service manually
+## 3. Deploy serving service manually
 Use the [Helm chart](https://helm.sh/docs/topics/charts/) to deploy application on GKE cluster.
-#### 2.1. Deploy NGINX ingress controller
+#### 3.1. Deploy NGINX ingress controller
 Using NGINX on Kubernetes is a common pattern for managing and routing traffic within a Kubernetes cluster, particularly when dealing with external traffic. Instead of assigning multiple external IPs to different services, using an NGINX ingress controller offers several benefits, including efficient traffic management, cost reduction, and a simplified architecture. You can run the following bash command to deploy NGINX on Kubernetes:
 ```bash
 helm upgrade --install nginx-ingress ./nginx-ingress --namespace nginx-system --create-namespace
@@ -99,21 +123,21 @@ helm upgrade --install nginx-ingress ./nginx-ingress --namespace nginx-system --
 After executing this command, the NGINX ingress controller will be created in the nginx-system namespace. Then, copy the external-ip of its service to use in the following steps.
 ![](images/4_external_ip_nginx.png)
 
-#### 2.2. Deploy the Embedding Model
+#### 3.2. Deploy the Embedding Model
 Since my data pertains to Vietnam's law, I use an embedding model that is trained specifically for Vietnamese words. Run the following bash command to deploy it on Kubernetes:
 ```bash
 helm upgrade --install text-vectorizer ./embedding/helm_embedding --namespace emb --create-namespace
 ```
 After executing this command, several pods for the embedding model will be created in the `emb` namespace.
 
-#### 2.3. Deploy the Vector Database
+#### 3.3. Deploy the Vector Database
 To deploy the vector database, run the following bash command:
 ```bash
 helm upgrade --install   "weaviate"   ./weaviate   --namespace "weaviate"   --values ./weaviate/values.yaml --create-namespace
 ```
 After this command, a pod for the vector database will be created in the `weaviate` namespace.
 
-#### 2.4. Deploy the RAG Controller
+#### 3.4. Deploy the RAG Controller
 This component coordinates user queries and provides answers from the LLM. Before running the Helm install command, you must edit the host of the ingress in `./rag_controller1/helm_rag_controller/values.yaml`, to use the `external-ip` of the NGINX service mentioned above and append `sslip.io` to expose the IP publicly. For example, in my case:
 ```helm
 ingress: 
@@ -126,7 +150,7 @@ helm upgrade --install   rag-controller   ./rag_controller1/helm_rag_controller 
 Now you can access Rag Controller at address: http://34.126.70.146.sslip.io/rag/docs
 ![](images/6_raggui.png)
 
-#### 2.5. Deploy the Indexing Pipeline
+#### 3.5. Deploy the Indexing Pipeline
 This component manages data indexing to the vector database. Similar to the RAG controller, you need to edit the host of the ingress in `./indexing_pipeline/helm_indexing_pipeline/values.yaml`, using the `external-ip` of the NGINX service mentioned earlier and appending `nip.io` to expose the IP publicly. For example, in my case:
 ```helm
 ingress: 
@@ -138,7 +162,7 @@ helm upgrade --install indexing-pipeline ./indexing_pipeline/helm_indexing_pipel
 ```
 Now you can access Indexing Pipeline at address: http://34.126.70.146.nip.io/idx/docs
 ![](images/6_raggui1.png)
-#### 2.6. Deploy the LLM
+#### 3.6. Deploy the LLM
 Since I'm using the free version of Google Cloud, it doesn't support GPUs. Therefore, I deploy the LLM locally based on Hugging Face's `text generation inference`. To deploy this model, I use a GPU with 24GB VRAM:
 ```bash
 sudo docker run --gpus all --shm-size 64g -p 8080:80 -v ./data:/data \
@@ -146,14 +170,14 @@ sudo docker run --gpus all --shm-size 64g -p 8080:80 -v ./data:/data \
     ghcr.io/huggingface/text-generation-inference:2.2.0 \
     --model-id Viet-Mistral/Vistral-7B-Chat
 ```
-After running the container, I expose the local web service to the internet via the [pagekite](https://pagekite.net/) service: `https://nthaiduong23.pagekite.me/`, however it only have quota traffic is 2555 MB and 1 month for try, so `pagekite` only use for experiment.
+After running the container, I expose the local web service to the internet via the [pagekite](https://pagekite.net/) service: `https://nthaiduong23.pagekite.me/`, Please note that the free version of `pagekite` has a traffic quota of 2555 MB and is available for only one month, so it is suitable only for experimental purposes.
 
 
 **How to get domain name using `pagekite`**
 
-You should create an acc emain clone and login in [pagekite](https://pagekite.net/)
+You should create an account email clone and login in to [pagekite](https://pagekite.net/)
 ![](images/7_llm1.png)
-After click link in email above, you edit secret, like: `12345`. 
+After clicking the link in the verification email, set up your secret key, such as `12345`. 
 ![](images/7_llm2.png)
 And edit `pagekite.rc` using:
 ```bash
@@ -161,7 +185,7 @@ nano ~/.pagekite.rc
 ```
 ![](images/7_llm3.png)
 
-Then you run following command to create domain name:
+Then execute the following commands to create your domain name:
 ```bash
 curl -O https://pagekite.net/pk/pagekite.py
 python pagekite.py --fe_nocertcheck 8080 nthaiduong23.pagekite.me
@@ -170,7 +194,7 @@ python pagekite.py --fe_nocertcheck 8080 nthaiduong23.pagekite.me
 Now you can access LLM at address: https://nthaiduong23.pagekite.me/docs/
 ![](images/8_llm.png)
 
-#### 2.7. Deploy the Data Preprocessing Pipeline
+#### 3.7. Deploy the Data Preprocessing Pipeline
 This section involves importing data from an external database into Weaviate. First, you should create two bucket in [GCS](https://console.cloud.google.com/storage/), one for store file pdf when Engineer post, one for store file json after process through [Google Cloud Run function]{https://console.cloud.google.com/functions/} and then add permission to the bucket: `storage admin`
 ![](images/5_permission_bucket.png)
 Next, enter the following commands to set up notifications and Pub/Sub subscriptions:
@@ -199,32 +223,32 @@ gcloud functions deploy handle-pdf-delete \
 --timeout 540s \
 --memory 512MB
 ```
-To import a PDF into the bucket, simply enter:
+To import a PDF into the bucket, use the following command:
 ```bash
 gsutil cp <your_pdf_path> gs://nthaiduong83-pdf-bucket1/
 ```
-and to remove it:
+To remove it, use:
 ```bash
 gsutil rm gs://nthaiduong83-pdf-bucket1/gt1.pdf
 ```
 This setup allows you to automate the handling of file uploads and deletions in the GCS bucket, triggering specific functions to process these events as needed.
 
-## 3. Deploy observable service
-#### 3.1. Tracing with Jaeger & Opentelemetry
-Before deploy, you shoude edit `ingress.host=<your_domain_jaeger>`. In my case, it is `ingress.host=jaeger.ntd.com`
+## 4. Deploy observable service
+#### 4.1. Tracing with Jaeger & Opentelemetry
+Before deployment, edit the `ingress.host` variable to match your Jaeger domain, like so:  `ingress.host=<your_domain_jaeger>`. In my case, it is `ingress.host=jaeger.ntd.com`
 
-Then, run the following bash command to deploy it on Kubernetes:
+Then, run the following command to deploy Jaeger on Kubernetes:
 ```bash
 helm upgrade --install jaeger-tracing ./jaeger-all-in-one --namespace jaeger-tracing --create-namespace
 ```
 
-Next add Jaeger's domain name to nginx's External IP. 
+Next, add Jaeger's domain name to NGINX's external IP:
 ```bash
 sudo vim /etc/hosts
 
 <your_external_svc_nginx> <your_domain_jaeger>
 ```
-In my case, it is:
+For example, in my case:
 ```bash
 sudo vim /ect/hosts
 
@@ -232,8 +256,8 @@ sudo vim /ect/hosts
 ```
 Now you can access Jaeger UI at `http://<your_domain_jaeger>/search`
 
-#### 3.2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana
-Loki is used to collecting logs from k8s, beside of it, Prometheus is used to scrape metrics from k8s and llm's container. Because Prometheus scrape metrics from llm's container local, you need to add job for it in `./prometheus1/values-prometheus.yaml`
+#### 4.2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana
+Loki is used for collecting logs from Kubernetes, while Prometheus scrapes metrics from Kubernetes and the LLM’s container. Since Prometheus scrapes metrics from the LLM’s container locally, you need to add a job for it in `./prometheus1/values-prometheus.yaml`
 ```bash
 prometheus:
   prometheusSpec:
@@ -245,14 +269,14 @@ prometheus:
         static_configs:
           - targets: ['nthaiduong23.pagekite.me']
 ```
-Then, run the following bash command to deploy it on Kubernetes:
+Then, run the following commands to deploy Prometheus and Loki on Kubernetes:
 ```bash
 helm upgrade --install prometheus-grafana-stack -f ./prometheus1/values-prometheus.yaml ./prometheus1/kube-prometheus-stack --namespace monitoring --create-namespace
 ```
 ```bash
 helm upgrade --install loki -f ./loki/values-loki.yaml ./loki/loki-stack --namespace monitoring --create-namespace
 ```
-Similar Jaeger, you shoude edit `ingress.host=<your_domain_you_want>`, and run following to add domain name to nginx's External IP. In my case, it is:
+Similar to Jaeger, edit `ingress.host=<your_domain_you_want>` and run the following command to add the domain name to NGINX's external IP. In my case:
 ```bash
 sudo vim /etc/hosts
 
@@ -261,23 +285,22 @@ sudo vim /etc/hosts
 ```
 Now you can access Prometheus UI and Grafana UI at `http://<your_domain_jaeger>/search`.
 ![](images/9_prometheus.png)
-You should enter username and password as iamge below 
+You should enter the username and password as shown in the image below: 
 ![](images/10_grafana1.png)
-and import `tgi_dashboard.json` in Grafana UI to display metrics of llm:
+Then import `tgi_dashboard.json`  in the Grafana UI to display metrics for the LLM:
 ![](images/11_grafana2.png)
-To display metrics of cluster you enter `Dashboards/General`:
+To display cluster metrics, navigate to `Dashboards/General`:
 ![](images/13_grafana4.png)
 And this is the result:
 ![](images/12_grafana3.png)
 
-Also to see logs from Loki you do as gif below:
+Also to view logs from Loki, follow the steps shown in the GIF below:
 ![](images/14_grafana5.gif)
 
-## 4. Create GCE Cluster using Ansible
-You can use same project with GKE above if you enough `quota`, or you also create new project. In this project, i use same project above.
-Then download the service account key in JSON format, how to get key below:
+## 5. Create GCE Cluster using Ansible
+You can use the same project with GKE as long as you have enough `quota`, or you can create a new project. In this guide, I used the same project as above. Download the service account key in JSON format; instructions are below:
 ![](images/15_downloadkeyjson.gif)
-After have file key json, you move to folder `ansible/secrets` and replace variable **service_account_file** and **project** in `ansible/playbooks/create_compute_instance.yaml`  corresponding with path secret file already and your project id, then run following command:
+After obtaining the JSON key file, move it to the `ansible/secrets` folder and update the **service_account_file** and **project** variables in `ansible/playbooks/create_compute_instance.yaml`  corresponding with path secret file already and your project id, then run following command:
 ```bash
 cd ansible
 
@@ -288,31 +311,31 @@ ansible-playbook playbooks/create_compute_instance.yaml
 ```
 + GCE is deployed at **asia-southeast1-b** with machine type is: **"e2-standard-2"**  (2 vCPUs, 8 GB RAM and costs $49.92/month).
 
-After create GKE, you copy external ip of that VM and put to inventory. Also you update ssh keys in metadata of VM, you can see gif below:
+After creating the GKE cluster, copy the external IP of the VM and add it to the inventory. Also, update the SSH keys in the VM’s metadata, as shown below:
 ![](images/16_updatesshkey.gif)
 
-Before install Jenkins on VM, i use Dockerfile from `custom_image_jenkins` to build docker based Jenkins comes with helm to create agent to create pod in K8s.
+To install Jenkins on the VM, use a Dockerfile from `custom_image_jenkins` to build a Docker-based Jenkins that comes with Helm, enabling it to create agents to deploy pods in Kubernetes:
 ```bash
 cd custom_image_jenkins
 
 docker build -t <your_name_dockerhub>:<your_tag> .
 docker push <your_name_dockerhub>:<your_tag>
 ```
-Or you can use image from my dockerhub: `nthaiduong83/jenkins-k8s:v1`
-Then you run follow command to install Jenkins on VM:
+Alternatively, you can use my Docker image: `nthaiduong83/jenkins-k8s:v1`
+Then, run the following command to install Jenkins on the VM:
 
 ```bash
 cd ansible
 
 ansible-playbook -i inventory playbooks/deploy_jenkins.yaml
 ```
-After finish some task, you access to the VM and check docker container.
+After completing these tasks, access the VM and check the Docker container.
 ![](images/17_checkjenkins.png)
 
-## 5. Setup Jenkins
-You setup Jenkins follow below gif:
+## 6. Setup Jenkins
+Follow the instructions in the GIF below to set up Jenkins:
 ![](images/18_setupjenkins.gif)
-After install finish, you run following command:
+After the installation is complete, run the following commands:
 ```bash
 kubectl create clusterrolebinding <your_name_space>-admin-binding \
   --clusterrole=admin \
@@ -324,23 +347,30 @@ kubectl create clusterrolebinding anonymous-admin-binding \
   --user=system:anonymous \
   --namespace=<your_name_space>
 ```
-and you have to install plugin K8s: "Docker, Docker pipeline, gcloud SDK, Kubernetes" as gif:
+Install the following Kubernetes plugins in Jenkins: "Docker, Docker Pipeline, gcloud SDK, Kubernetes", as shown in this GIF:
 ![](images/19_installplugin.gif)
-and you use command `kubectl config view --raw` to view certificate and url of cluster
-#### 5.1 Connecting with K8s cluster:
+Use the command `kubectl config view --raw` to view the cluster's certificate and URL.
+#### 6.1 Connecting with K8s cluster
 ![](images/20_connect_k8s.gif)
 
-#### 5.2 Add dockerhub credential:
+#### 6.2 Add dockerhub credential
 ![](images/21_connectdockerhub.gif)
 
-#### 5.3 Config Github API usage rate limiting strategy:
-Change stratagy into: `Never check rate limie`
+#### 6.3 Config Github API usage rate limiting strategy
+Change strategy into: `Never check rate limie`
 ![](images/22_ratelimit.gif)
 
-#### 5.4 Create Item and Connect Jenkins to GitHub:
+#### 6.4 Create Item and Connect Jenkins to GitHub
 ![](images/23_connectgithub.gif)
-when build done you will see:
+When the build is complete, you will see the following:
 ![](images/24_finish.png)
 
-#### 5.5 Setup Webhook GitHub to auto deploy when push code:
+#### 6.5 Set Up a GitHub Webhook to Automatically Deploy on Code Push
 ![](images/25_addwebhook.gif)
+
+## 7. Demo
+#### 7.1 Demo Process Ingest Data
+![](images/26_Demoprocessimport.gif)
+
+#### 7.1 Demo Process Query
+![](images/27_Demoprocessquery.gif)

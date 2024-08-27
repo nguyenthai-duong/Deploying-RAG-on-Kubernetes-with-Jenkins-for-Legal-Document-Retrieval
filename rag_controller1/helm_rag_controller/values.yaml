@@ -35,7 +35,7 @@ service:
 env:
   WEAVIATE_URL: http://weaviate.weaviate.svc.cluster.local:85
   VECTORIZE_URL: http://emb-svc.emb.svc.cluster.local:81/vectorize
-  LLM_API_URL: https://nthaiduong83.serveo.net/generate
+  LLM_API_URL: https://nthaiduong23.pagekite.me/generate
   MAX_NEW_TOKENS: 100
   TEMPERATURE: 0.5
   JAEGER_HOST: https://jaeger-tracing-jaeger-all-in-one.jaeger-tracing.svc.cluster.local
