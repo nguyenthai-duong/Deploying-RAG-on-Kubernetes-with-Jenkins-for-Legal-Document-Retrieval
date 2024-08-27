@@ -1,4 +1,4 @@
-# **Deploying RAG Applications on K8s** 
+# **Deploying RAG on K8s with Jenkins for Legal Document Retrival** 
 
 
 ## **1. Overview:**
@@ -312,6 +312,35 @@ After finish some task, you access to the VM and check docker container.
 ## 5. Setup Jenkins
 You setup Jenkins follow below gif:
 ![](images/18_setupjenkins.gif)
-After install finish, you have to connect with K8s as gif:
+After install finish, you run following command:
+```bash
+kubectl create clusterrolebinding <your_name_space>-admin-binding \
+  --clusterrole=admin \
+  --serviceaccount=<your_name_space>:default \
+  --namespace=<your_name_space>
 
+kubectl create clusterrolebinding anonymous-admin-binding \
+  --clusterrole=admin \
+  --user=system:anonymous \
+  --namespace=<your_name_space>
+```
+and you have to install plugin K8s: "Docker, Docker pipeline, gcloud SDK, Kubernetes" as gif:
+![](images/19_installplugin.gif)
+and you use command `kubectl config view --raw` to view certificate and url of cluster
+#### 5.1 Connecting with K8s cluster:
+![](images/20_connect_k8s.gif)
 
+#### 5.2 Add dockerhub credential:
+![](images/21_connectdockerhub.gif)
+
+#### 5.3 Config Github API usage rate limiting strategy:
+Change stratagy into: `Never check rate limie`
+![](images/22_ratelimit.gif)
+
+#### 5.4 Create Item and Connect Jenkins to GitHub:
+![](images/23_connectgithub.gif)
+when build done you will see:
+![](images/24_finish.png)
+
+#### 5.5 Setup Webhook GitHub to auto deploy when push code:
+![](images/25_addwebhook.gif)
