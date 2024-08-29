@@ -73,8 +73,35 @@ def create_chunk_json(text):
 
     return data
 
+def download_blob_to_tmp(blob, file_name):
+    temp_path = f"/tmp/{file_name}"
+    blob.download_to_filename(temp_path)
+    return temp_path
+
+def combine_texts_from_pdfs(bucket, exclude_file=None):
+    all_text = ""
+    blobs = bucket.list_blobs()
+    for blob in blobs:
+        if blob.name.endswith('.pdf') and blob.name != exclude_file:
+            temp_pdf_path = download_blob_to_tmp(blob, blob.name)
+            text = get_text_from_pdf(temp_pdf_path)
+            all_text += text + "\n"
+    return all_text
+
+def upload_json_to_bucket(json_data, bucket_name, output_filename):
+    storage_client = storage.Client()
+    json_bucket = storage_client.bucket(bucket_name)
+    output_blob = json_bucket.blob(output_filename)
+
+    output_json_path = f"/tmp/{output_filename}"
+    with open(output_json_path, "w", encoding="utf-8") as file:
+        json.dump(json_data, file, ensure_ascii=False, indent=4)
+    
+    output_blob.upload_from_filename(output_json_path)
+    return output_json_path
+
 def send_file_to_api(file_path):
-    api_url = "http://34.124.144.145.nip.io/embed_and_import_json"
+    api_url = os.environ.get('API_URL')
     with open(file_path, 'rb') as file:
         files = {'file': file}
         response = requests.post(api_url, files=files)
@@ -84,6 +111,7 @@ def send_file_to_api(file_path):
             print(f"Successfully sent file to API.")
 
 def process_pdf_file(event, context):
+    json_bucket_name = os.environ.get('JSON_BUCKET_NAME')  # Name of the new bucket
     """Triggered by a Pub/Sub message when a file is uploaded."""
     pubsub_message = base64.b64decode(event['data']).decode('utf-8')
     message_data = json.loads(pubsub_message)
@@ -104,40 +132,21 @@ def process_pdf_file(event, context):
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(file_name)
 
-    temp_pdf_path = f"/tmp/{file_name}"
-    temp_json_path = temp_pdf_path.replace('.pdf', '.json')
-
     # Download the uploaded PDF file from GCS
-    blob.download_to_filename(temp_pdf_path)
+    temp_pdf_path = download_blob_to_tmp(blob, file_name)
 
     # Extract text from the PDF and create a JSON
     text = get_text_from_pdf(temp_pdf_path)
     current_file_json = create_chunk_json(text)
 
     # Process all other PDFs in the bucket and generate a combined JSON
-    all_text = ""
-    blobs = bucket.list_blobs()
-    for blob in blobs:
-        if blob.name.endswith('.pdf') and blob.name != file_name:
-            temp_pdf_path = f"/tmp/{blob.name}"
-            blob.download_to_filename(temp_pdf_path)
-            text = get_text_from_pdf(temp_pdf_path)
-            all_text += text + "\n"
-
+    all_text = combine_texts_from_pdfs(bucket, exclude_file=file_name)
     other_files_json = create_chunk_json(all_text)
 
     combined_json = current_file_json + other_files_json
 
     # Save combined result to 'all.json' in the new bucket
-    output_json_path = "/tmp/all.json"
-    with open(output_json_path, "w", encoding="utf-8") as file:
-        json.dump(combined_json, file, ensure_ascii=False, indent=4)
-
-    # Upload the 'all.json' to the new bucket
-    json_bucket_name = "nthaiduong83-json-storage-bucket"  # Name of the new bucket
-    json_bucket = storage_client.bucket(json_bucket_name)
-    output_blob = json_bucket.blob('all.json')
-    output_blob.upload_from_filename(output_json_path)
+    output_json_path = upload_json_to_bucket(combined_json, json_bucket_name, 'all.json')
 
     print(f"Processed {file_name} and saved combined result to {json_bucket_name}/all.json")
 
@@ -153,26 +162,12 @@ def handle_pdf_delete(event, context):
     bucket = storage_client.bucket(bucket_name)
 
     # Re-generate the all.json by processing all remaining PDFs
-    all_text = ""
-    blobs = bucket.list_blobs()
-    for blob in blobs:
-        if blob.name.endswith('.pdf'):
-            temp_pdf_path = f"/tmp/{blob.name}"
-            blob.download_to_filename(temp_pdf_path)
-            text = get_text_from_pdf(temp_pdf_path)
-            all_text += text + "\n"
-
+    all_text = combine_texts_from_pdfs(bucket)
     updated_json = create_chunk_json(all_text)
 
     # Save updated JSON to the new bucket
-    output_json_path = "/tmp/all.json"
-    with open(output_json_path, "w", encoding="utf-8") as file:
-        json.dump(updated_json, file, ensure_ascii=False, indent=4)
-
     json_bucket_name = "nthaiduong83-json-storage-bucket"  # Name of the new bucket
-    json_bucket = storage_client.bucket(json_bucket_name)
-    output_blob = json_bucket.blob('all.json')
-    output_blob.upload_from_filename(output_json_path)
+    output_json_path = upload_json_to_bucket(updated_json, json_bucket_name, 'all.json')
 
     print(f"Updated {json_bucket_name}/all.json after deleting {deleted_file_name}")
     send_file_to_api(output_json_path)

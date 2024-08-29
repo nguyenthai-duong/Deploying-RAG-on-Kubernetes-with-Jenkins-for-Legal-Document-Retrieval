@@ -11,6 +11,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import get_tracer_provider, set_tracer_provider
 from opentelemetry import trace  
+import uvicorn
 
 JAEGER_HOST = os.getenv("JAEGER_HOST", "jaeger-tracing-jaeger-all-in-one.jaeger-tracing.svc.cluster.local")
 JAEGER_PORT = os.getenv("JAEGER_PORT", "6831")
@@ -132,5 +133,4 @@ async def query(query_str: str):
         raise HTTPException(status_code=500, detail="Failed to process the query")
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=True)

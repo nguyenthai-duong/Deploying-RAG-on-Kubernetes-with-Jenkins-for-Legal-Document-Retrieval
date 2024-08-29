@@ -1,31 +1,31 @@
-# **Deploying RAG on K8s with Jenkins for Legal Document Retrival** 
-- [**Deploying RAG on K8s with Jenkins for Legal Document Retrival**](#deploying-rag-on-k8s-with-jenkins-for-legal-document-retrival)
-  - [1. Overview:](#1-overview)
-  - [2. Create GKE Cluster using Terraform](#2-create-gke-cluster-using-terraform)
-  - [3. Deploy serving service manually](#3-deploy-serving-service-manually)
-      - [3.1. Deploy NGINX ingress controller](#31-deploy-nginx-ingress-controller)
-      - [3.2. Deploy the Embedding Model](#32-deploy-the-embedding-model)
-      - [3.3. Deploy the Vector Database](#33-deploy-the-vector-database)
-      - [3.4. Deploy the RAG Controller](#34-deploy-the-rag-controller)
-      - [3.5. Deploy the Indexing Pipeline](#35-deploy-the-indexing-pipeline)
-      - [3.6. Deploy the LLM](#36-deploy-the-llm)
-      - [3.7. Deploy the Data Preprocessing Pipeline](#37-deploy-the-data-preprocessing-pipeline)
-  - [4. Deploy observable service](#4-deploy-observable-service)
-      - [4.1. Tracing with Jaeger \& Opentelemetry](#41-tracing-with-jaeger--opentelemetry)
-      - [4.2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana](#42-monitoring-with-loki-and-prometheus-then-deploy-dashboard-in-grafana)
-  - [5. Create GCE Cluster using Ansible](#5-create-gce-cluster-using-ansible)
-  - [6. Setup Jenkins](#6-setup-jenkins)
-      - [6.1 Connecting with K8s cluster](#61-connecting-with-k8s-cluster)
-      - [6.2 Add dockerhub credential](#62-add-dockerhub-credential)
-      - [6.3 Config Github API usage rate limiting strategy](#63-config-github-api-usage-rate-limiting-strategy)
-      - [6.4 Create Item and Connect Jenkins to GitHub](#64-create-item-and-connect-jenkins-to-github)
-      - [6.5 Set Up a GitHub Webhook to Automatically Deploy on Code Push](#65-set-up-a-github-webhook-to-automatically-deploy-on-code-push)
-  - [7. Demo](#7-demo)
-      - [7.1 Demo Process Ingest Data](#71-demo-process-ingest-data)
-      - [7.1 Demo Process Query](#71-demo-process-query)
+# **Deploying RAG on K8s with Jenkins for Legal Document Retrieval** 
+- [**Deploying RAG on K8s with Jenkins for Legal Document Retrieval**](#deploying-rag-on-k8s-with-jenkins-for-legal-document-retrieval)
+  - [I. Overview](#i-overview)
+  - [II. Create GKE Cluster using Terraform](#ii-create-gke-cluster-using-terraform)
+  - [III. Deploy serving service manually](#iii-deploy-serving-service-manually)
+      - [1. Deploy NGINX ingress controller](#1-deploy-nginx-ingress-controller)
+      - [2. Deploy the Embedding Model](#2-deploy-the-embedding-model)
+      - [3. Deploy the Vector Database](#3-deploy-the-vector-database)
+      - [4. Deploy the RAG Controller](#4-deploy-the-rag-controller)
+      - [5. Deploy the Indexing Pipeline](#5-deploy-the-indexing-pipeline)
+      - [6. Deploy the LLM](#6-deploy-the-llm)
+      - [7. Deploy the Data Preprocessing Pipeline](#7-deploy-the-data-preprocessing-pipeline)
+  - [IV. Deploy observable service](#iv-deploy-observable-service)
+      - [1. Tracing with Jaeger \& Opentelemetry](#1-tracing-with-jaeger--opentelemetry)
+      - [2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana](#2-monitoring-with-loki-and-prometheus-then-deploy-dashboard-in-grafana)
+  - [V. Create GCE Cluster using Ansible](#v-create-gce-cluster-using-ansible)
+  - [VI. Setup Jenkins](#vi-setup-jenkins)
+      - [1 Connecting with K8s cluster](#1-connecting-with-k8s-cluster)
+      - [2 Add Docker Hub's credentials](#2-add-docker-hubs-credentials)
+      - [3 Config Github API usage rate limiting strategy](#3-config-github-api-usage-rate-limiting-strategy)
+      - [4 Create Item and Connect Jenkins to GitHub](#4-create-item-and-connect-jenkins-to-github)
+      - [5 Set Up a GitHub Webhook to Automatically Deploy on Code Push](#5-set-up-a-github-webhook-to-automatically-deploy-on-code-push)
+  - [VII. Demo](#vii-demo)
+      - [1 Demo Process Ingest Data](#1-demo-process-ingest-data)
+      - [2 Demo Process Query](#2-demo-process-query)
 
 
-## 1. Overview:
+## I. Overview
 Retrieval-augmented generation (RAG) systems combine generative AI with information retrieval to provide contextualized answer generation. Building reliable and performant RAG applications at scale is challenging. In this project, I deploy a continuous and highly scalable RAG application on Google Kubernetes Engine (GKE) using CI/CD. This is my first project as a Machine Learning Engineer (MLE), and I learned from [FSDS](https://fullstackdatascience.com/). The image below shows my overall system architecture:
 ![systempipline](images/1_architecture.png)
 
@@ -80,8 +80,40 @@ Retrieval-augmented generation (RAG) systems combine generative AI with informat
 - **notebook.ipynb**: Jupyter notebook for testing components of the RAG system such as the embedding model, vector database, and LLM.
 - **Jenkinsfile**: Defines the CI/CD pipeline for continuous deployment of `rag_controller1`.
 
+```txt
+  ├── ansible                                            /* Creates GCE instances and downloads a custom Docker image for Jenkins */
+  ├── custom_image_jenkins                               /* Custom Jenkins image that includes the Helm tool */
+  ├── data_pipeline                                      /* Set up a system to automatically handle data that is uploaded to or deleted from a GCS bucket */
+  │    ├── .pdf                                          /* Data to import */
+  │    └── main.py                                       /* Serves as the entry point for data preprocessing tasks */
+  ├── embedding                                          /* Deploys the embedding model */
+  │    ├── helm_embedding                                 /* Helm chart for deploying the embedding model */
+  │    ├── app.py                                        /* API for the embedding model */
+  │    └── Dockerfile                                    /* Dockerfile for the embedding model */
+  ├── image                                              /* Contains images displayed in `README.md` */
+  ├── indexing_pipeline                                  /* Deploys the indexing pipeline */
+  │    ├── helm_indexing_pipeline                        /* Helm chart for deploying the indexing pipeline */
+  │    ├── main.py                                       /* API and communication handler for the indexing pipeline */
+  │    └── Dockerfile                                    /* Dockerfile for the indexing pipeline */
+  ├── jaeger-all-in-one                                  /* Helm chart for deploying Jaeger */
+  ├── loki                                               /* Helm chart for deploying Loki */
+  ├── nginx-ingress                                      /* Helm chart for deploying Nginx Ingress */
+  ├── prometheus1                                        /* Contains monitoring tools deployment configurations */
+  │    ├── kube-prometheus-stack                         /* Helm chart for deploying Prometheus, Alertmanager, and Grafana */
+  │    ├── values-prometheus.yaml                        /* Custom values for the `kube-prometheus-stack` chart */
+  │    └── tgi_dashboard.json                            /* Grafana dashboard to display metrics for the LLM container */
+  ├── rag_controller1                                    /* Deploys the RAG controller */
+  │    ├── helm_rag_controller                           /* Helm chart for deploying the RAG controller */
+  │    ├── main.py                                       /* API and communication handler for the RAG controller */
+  │    └── Dockerfile                                    /* Dockerfile for the RAG controller */
+  ├── terraform                                          /* Terraform scripts for creating the GKE cluster */
+  ├── weaviate                                           /* Helm chart for deploying the Weaviate vector database */
+  ├── notebook.ipynb                                     /* Jupyter notebook for testing components of the RAG system */
+  └── Jenkinsfile                                        /* Defines the CI/CD pipeline for continuous deployment of `rag_controller1` */
 
-## 2. Create GKE Cluster using Terraform
+```
+
+## II. Create GKE Cluster using Terraform
 **1. Create Project in [Google Cloud Platform](https://console.cloud.google.com/) and Enable GKE Standard in [GKE](https://console.cloud.google.com/kubernetes).**
 
 **2. Install gcloud CLI & google-cloud-cli-gke-gcloud-auth-plugin**
@@ -113,9 +145,9 @@ It can takes about 10 minutes for create successfully a GKE cluster. You can see
 + In the [GKE UI](https://console.cloud.google.com/kubernetes/list) you follow instruction gif below to connect GKE cluster:
 ![](images/3_gkeconnect.gif)
 
-## 3. Deploy serving service manually
+## III. Deploy serving service manually
 Use the [Helm chart](https://helm.sh/docs/topics/charts/) to deploy application on GKE cluster.
-#### 3.1. Deploy NGINX ingress controller
+#### 1. Deploy NGINX ingress controller
 Using NGINX on Kubernetes is a common pattern for managing and routing traffic within a Kubernetes cluster, particularly when dealing with external traffic. Instead of assigning multiple external IPs to different services, using an NGINX ingress controller offers several benefits, including efficient traffic management, cost reduction, and a simplified architecture. You can run the following bash command to deploy NGINX on Kubernetes:
 ```bash
 helm upgrade --install nginx-ingress ./nginx-ingress --namespace nginx-system --create-namespace
@@ -123,21 +155,21 @@ helm upgrade --install nginx-ingress ./nginx-ingress --namespace nginx-system --
 After executing this command, the NGINX ingress controller will be created in the nginx-system namespace. Then, copy the external-ip of its service to use in the following steps.
 ![](images/4_external_ip_nginx.png)
 
-#### 3.2. Deploy the Embedding Model
+#### 2. Deploy the Embedding Model
 Since my data pertains to Vietnam's law, I use an embedding model that is trained specifically for Vietnamese words. Run the following bash command to deploy it on Kubernetes:
 ```bash
 helm upgrade --install text-vectorizer ./embedding/helm_embedding --namespace emb --create-namespace
 ```
 After executing this command, several pods for the embedding model will be created in the `emb` namespace.
 
-#### 3.3. Deploy the Vector Database
+#### 3. Deploy the Vector Database
 To deploy the vector database, run the following bash command:
 ```bash
 helm upgrade --install   "weaviate"   ./weaviate   --namespace "weaviate"   --values ./weaviate/values.yaml --create-namespace
 ```
 After this command, a pod for the vector database will be created in the `weaviate` namespace.
 
-#### 3.4. Deploy the RAG Controller
+#### 4. Deploy the RAG Controller
 This component coordinates user queries and provides answers from the LLM. Before running the Helm install command, you must edit the host of the ingress in `./rag_controller1/helm_rag_controller/values.yaml`, to use the `external-ip` of the NGINX service mentioned above and append `sslip.io` to expose the IP publicly. For example, in my case:
 ```helm
 ingress: 
@@ -150,7 +182,7 @@ helm upgrade --install   rag-controller   ./rag_controller1/helm_rag_controller 
 Now you can access Rag Controller at address: http://34.126.70.146.sslip.io/rag/docs
 ![](images/6_raggui.png)
 
-#### 3.5. Deploy the Indexing Pipeline
+#### 5. Deploy the Indexing Pipeline
 This component manages data indexing to the vector database. Similar to the RAG controller, you need to edit the host of the ingress in `./indexing_pipeline/helm_indexing_pipeline/values.yaml`, using the `external-ip` of the NGINX service mentioned earlier and appending `nip.io` to expose the IP publicly. For example, in my case:
 ```helm
 ingress: 
@@ -162,7 +194,7 @@ helm upgrade --install indexing-pipeline ./indexing_pipeline/helm_indexing_pipel
 ```
 Now you can access Indexing Pipeline at address: http://34.126.70.146.nip.io/idx/docs
 ![](images/6_raggui1.png)
-#### 3.6. Deploy the LLM
+#### 6. Deploy the LLM
 Since I'm using the free version of Google Cloud, it doesn't support GPUs. Therefore, I deploy the LLM locally based on Hugging Face's `text generation inference`. To deploy this model, I use a GPU with 24GB VRAM:
 ```bash
 sudo docker run --gpus all --shm-size 64g -p 8080:80 -v ./data:/data \
@@ -194,7 +226,7 @@ python pagekite.py --fe_nocertcheck 8080 nthaiduong23.pagekite.me
 Now you can access LLM at address: https://nthaiduong23.pagekite.me/docs/
 ![](images/8_llm.png)
 
-#### 3.7. Deploy the Data Preprocessing Pipeline
+#### 7. Deploy the Data Preprocessing Pipeline
 This section involves importing data from an external database into Weaviate. First, you should create two bucket in [GCS](https://console.cloud.google.com/storage/), one for store file pdf when Engineer post, one for store file json after process through [Google Cloud Run function]{https://console.cloud.google.com/functions/} and then add permission to the bucket: `storage admin`
 ![](images/5_permission_bucket.png)
 Next, enter the following commands to set up notifications and Pub/Sub subscriptions:
@@ -233,8 +265,8 @@ gsutil rm gs://nthaiduong83-pdf-bucket1/gt1.pdf
 ```
 This setup allows you to automate the handling of file uploads and deletions in the GCS bucket, triggering specific functions to process these events as needed.
 
-## 4. Deploy observable service
-#### 4.1. Tracing with Jaeger & Opentelemetry
+## IV. Deploy observable service
+#### 1. Tracing with Jaeger & Opentelemetry
 Before deployment, edit the `ingress.host` variable to match your Jaeger domain, like so:  `ingress.host=<your_domain_jaeger>`. In my case, it is `ingress.host=jaeger.ntd.com`
 
 Then, run the following command to deploy Jaeger on Kubernetes:
@@ -256,7 +288,7 @@ sudo vim /ect/hosts
 ```
 Now you can access Jaeger UI at `http://<your_domain_jaeger>/search`
 
-#### 4.2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana
+#### 2. Monitoring with Loki and Prometheus, then deploy dashboard in Grafana
 Loki is used for collecting logs from Kubernetes, while Prometheus scrapes metrics from Kubernetes and the LLM’s container. Since Prometheus scrapes metrics from the LLM’s container locally, you need to add a job for it in `./prometheus1/values-prometheus.yaml`
 ```bash
 prometheus:
@@ -297,7 +329,7 @@ And this is the result:
 Also to view logs from Loki, follow the steps shown in the GIF below:
 ![](images/14_grafana5.gif)
 
-## 5. Create GCE Cluster using Ansible
+## V. Create GCE Cluster using Ansible
 You can use the same project with GKE as long as you have enough `quota`, or you can create a new project. In this guide, I used the same project as above. Download the service account key in JSON format; instructions are below:
 ![](images/15_downloadkeyjson.gif)
 After obtaining the JSON key file, move it to the `ansible/secrets` folder and update the **service_account_file** and **project** variables in `ansible/playbooks/create_compute_instance.yaml`  corresponding with path secret file already and your project id, then run following command:
@@ -332,7 +364,7 @@ ansible-playbook -i inventory playbooks/deploy_jenkins.yaml
 After completing these tasks, access the VM and check the Docker container.
 ![](images/17_checkjenkins.png)
 
-## 6. Setup Jenkins
+## VI. Setup Jenkins
 Follow the instructions in the GIF below to set up Jenkins:
 ![](images/18_setupjenkins.gif)
 After the installation is complete, run the following commands:
@@ -350,27 +382,40 @@ kubectl create clusterrolebinding anonymous-admin-binding \
 Install the following Kubernetes plugins in Jenkins: "Docker, Docker Pipeline, gcloud SDK, Kubernetes", as shown in this GIF:
 ![](images/19_installplugin.gif)
 Use the command `kubectl config view --raw` to view the cluster's certificate and URL.
-#### 6.1 Connecting with K8s cluster
+#### 1 Connecting with K8s cluster
+Create ClusterRoleBinding in you GKE instance:
+```bash
+kubectl create clusterrolebinding model-serving-admin-binding \
+  --clusterrole=admin \
+  --serviceaccount=default:default \
+  --namespace=default
+
+kubectl create clusterrolebinding anonymous-admin-binding \
+  --clusterrole=admin \
+  --user=system:anonymous \
+  --namespace=default
+```
+And you follow the gif below:
 ![](images/20_connect_k8s.gif)
 
-#### 6.2 Add dockerhub credential
+#### 2 Add Docker Hub's credentials
 ![](images/21_connectdockerhub.gif)
 
-#### 6.3 Config Github API usage rate limiting strategy
+#### 3 Config Github API usage rate limiting strategy
 Change strategy into: `Never check rate limie`
 ![](images/22_ratelimit.gif)
 
-#### 6.4 Create Item and Connect Jenkins to GitHub
+#### 4 Create Item and Connect Jenkins to GitHub
 ![](images/23_connectgithub.gif)
 When the build is complete, you will see the following:
 ![](images/24_finish.png)
 
-#### 6.5 Set Up a GitHub Webhook to Automatically Deploy on Code Push
+#### 5 Set Up a GitHub Webhook to Automatically Deploy on Code Push
 ![](images/25_addwebhook.gif)
 
-## 7. Demo
-#### 7.1 Demo Process Ingest Data
+## VII. Demo
+#### 1 Demo Process Ingest Data
 ![](images/26_Demoprocessimport.gif)
 
-#### 7.1 Demo Process Query
+#### 2 Demo Process Query
 ![](images/27_Demoprocessquery.gif)

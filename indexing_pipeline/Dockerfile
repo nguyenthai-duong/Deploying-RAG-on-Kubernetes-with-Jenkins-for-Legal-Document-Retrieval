@@ -6,11 +6,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
 
 ENV WEAVIATE_URL=http://weaviate.weaviate.svc.cluster.local:85
 ENV VECTORIZE_URL=http://emb-svc.emb.svc.cluster.local:81/vectorize

@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import torch
 from transformers import AutoModel, AutoTokenizer
+import uvicorn
 
 app = FastAPI()
 
@@ -23,5 +24,4 @@ async def vectorize(request: TextRequest):
     return {"vector": vector}
 
 if __name__ == '__main__':
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)

@@ -1,0 +1,51 @@
+create project id: datapipepline-mlops1
+gcloud config set project datapipepline-mlops1
+
+create bucket: nthaiduong83-pdf-bucket1
+
+add permission of bucket -> storage admin
+gsutil iam ch serviceAccount:datapipepline-mlops1@appspot.gserviceaccount.com:roles/storage.objectAdmin gs://nthaiduong83-pdf-bucket
+
+gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-bucket1
+
+gcloud pubsub subscriptions create pdf-upload-subscription --topic=pdf-upload-topic
+
+gcloud functions deploy process-pdf-file \
+--runtime python310 \
+--trigger-topic pdf-upload-topic \
+--entry-point process_pdf_file \
+--timeout 540s \
+--memory 512MB \
+--set-env-vars API_URL="http://34.126.70.146.nip.io/embed_and_import_json",\
+JSON_BUCKET_NAME="nthaiduong83-json-storage-bucket"
+
+gcloud functions deploy handle-pdf-delete \
+--runtime python310 \
+--trigger-event google.storage.object.delete \
+--trigger-resource nthaiduong83-pdf-bucket1 \
+--entry-point handle_pdf_delete \
+--timeout 540s \
+--memory 512MB \
+--set-env-vars API_URL="http://34.126.70.146.nip.io/embed_and_import_json",\
+JSON_BUCKET_NAME="nthaiduong83-json-storage-bucket"
+
+
+
+
+gsutil iam ch serviceAccount:direct-branch-429215-v2@appspot.gserviceaccount.com:roles/storage.objectViewer gs://nthaiduong83-pdf-bucket
+
+gsutil iam ch serviceAccount:direct-branch-429215-v2@appspot.gserviceaccount.com:roles/storage.objectCreator gs://nthaiduong83-pdf-bucket
+
+gsutil iam ch serviceAccount:datapipepline-mlops1@appspot.gserviceaccount.com:roles/storage.objectAdmin gs://nthaiduong83-pdf-bucket
+
+
+
+gsutil cp dat_2024.pdf gs://nthaiduong83-pdf-bucket1/
+
+gsutil cp gt1.pdf gs://nthaiduong83-pdf-bucket1/
+gsutil cp gt2.pdf gs://nthaiduong83-pdf-bucket1/
+
+gsutil rm gs://nthaiduong83-pdf-bucket1/dat_2024.pdf  
+
+gsutil rm gs://nthaiduong83-pdf-bucket1/gt1.pdf
+
