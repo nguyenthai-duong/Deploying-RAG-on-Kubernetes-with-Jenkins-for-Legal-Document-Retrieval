@@ -214,7 +214,9 @@ gcloud functions deploy process-pdf-file \
 --trigger-topic pdf-upload-topic \
 --entry-point process_pdf_file \
 --timeout 540s \
---memory 512MB
+--memory 512MB \
+--set-env-vars API_URL="http://34.126.70.146.nip.io/embed_and_import_json",\
+JSON_BUCKET_NAME="nthaiduong83-json-storage-bucket"
 
 gcloud functions deploy handle-pdf-delete \
 --runtime python310 \
@@ -222,8 +224,12 @@ gcloud functions deploy handle-pdf-delete \
 --trigger-resource nthaiduong83-pdf-bucket1 \
 --entry-point handle_pdf_delete \
 --timeout 540s \
---memory 512MB
+--memory 512MB \
+--set-env-vars API_URL="http://34.126.70.146.nip.io/embed_and_import_json",\
+JSON_BUCKET_NAME="nthaiduong83-json-storage-bucket"
 ```
+where `API_URL` is a environment variable point to the URL of your NGINX load balancer that will route requests from your Cloud Function to the `embedding` service, and `JSON_BUCKET_NAME` is a environment variable represents the name of the Google Cloud Storage bucket where the all.json file will be stored after conversion from all PDF files.
+
 To import a PDF into the bucket, use the following command:
 ```bash
 gsutil cp <your_pdf_path> gs://nthaiduong83-pdf-bucket1/
