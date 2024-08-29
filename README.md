@@ -49,37 +49,6 @@ Retrieval-augmented generation (RAG) systems combine generative AI with informat
 * Data Source: [Government Documents (PDF)](https://congbao.chinhphu.vn/tai-ve-van-ban-so-08-vbhn-vpqh-40454-47126?format=pdf)
 
 **Project Structure**
-
-- **ansible/**: Creates GCE instances and downloads a custom Docker image for Jenkins.
-- **custom_image_jenkins/**: Custom Jenkins image that includes the Helm tool.
-- **data_pipeline/**: Set up a system to automatically handle data that is uploaded to or deleted from a GCS bucket.
-  - **.pdf**: Data to import.
-  - **main.py**: Serves as the entry point for a function or a set of functions that perform specific tasks related to data preprocessing.
-- **embedding/**: Deploys the embedding model.
-  - **helm_embedding/**: Helm chart for deploying the embedding model.
-  - **app.py**: API for the embedding model.
-  - **Dockerfile**: Dockerfile for the embedding model.
-- **image/**: Contains images displayed in `README.md`.
-- **indexing_pipeline/**: Deploys the indexing pipeline.
-  - **helm_indexing_pipeline/**: Helm chart for deploying the indexing pipeline.
-  - **main.py**: API and communication handler for the indexing pipeline.
-  - **Dockerfile**: Dockerfile for the indexing pipeline.
-- **jaeger-all-in-one/**: Helm chart for deploying Jaeger.
-- **loki/**: Helm chart for deploying Loki.
-- **nginx-ingress/**: Helm chart for deploying Nginx Ingress.
-- **prometheus1/**:
-  - **kube-prometheus-stack/**: Helm chart for deploying monitoring tools like Prometheus, Alertmanager, and Grafana.
-  - **values-prometheus.yaml**: Custom values for the `kube-prometheus-stack` chart.
-  - **tgi_dashboard.json**: Grafana dashboard to display metrics for the LLM container.
-- **rag_controller1/**: Deploys the RAG controller.
-  - **helm_rag_controller/**: Helm chart for deploying the RAG controller.
-  - **main.py**: API and communication handler for the RAG controller.
-  - **Dockerfile**: Dockerfile for the RAG controller.
-- **terraform/**: Terraform scripts for creating the GKE cluster.
-- **weaviate/**: Helm chart for deploying the Weaviate vector database.
-- **notebook.ipynb**: Jupyter notebook for testing components of the RAG system such as the embedding model, vector database, and LLM.
-- **Jenkinsfile**: Defines the CI/CD pipeline for continuous deployment of `rag_controller1`.
-
 ```txt
   ├── ansible                                            /* Creates GCE instances and downloads a custom Docker image for Jenkins */
   ├── custom_image_jenkins                               /* Custom Jenkins image that includes the Helm tool */
