@@ -7,11 +7,13 @@ import requests
 from google.cloud import storage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# Remove redundant spaces from the text.
 def remove_space_redundant(text):
     words = text.split()
     clean_text = " ".join(words)
     return clean_text
 
+# Extract text from a PDF file located at the given file path.
 def get_text_from_pdf(file_path):
     doc = fitz.open(file_path)
     text = ""
@@ -19,6 +21,7 @@ def get_text_from_pdf(file_path):
         text += page.get_text()
     return text
 
+# Create a structured JSON from the extracted text, splitting content into chunks.
 def create_chunk_json(text):
     content_between_chapters = re.findall(r"(Chương \b(?:I{1,3}(?:V?X?)?|VI{0,3}|XI{0,3}V?|XVI{0,3})\b\.?)(.*?)(?=(Chương \b(?:I{1,3}(?:V?X?)?|VI{0,3}|XI{0,3}V?|XVI{0,3})\b\.? |$))", text, re.DOTALL)
     chapter_name = []
@@ -73,11 +76,13 @@ def create_chunk_json(text):
 
     return data
 
+# Download a blob from Google Cloud Storage to a temporary local path.
 def download_blob_to_tmp(blob, file_name):
     temp_path = f"/tmp/{file_name}"
     blob.download_to_filename(temp_path)
     return temp_path
 
+# Combine text content from multiple PDFs in a GCS bucket, excluding a specified file.
 def combine_texts_from_pdfs(bucket, exclude_file=None):
     all_text = ""
     blobs = bucket.list_blobs()
@@ -88,6 +93,7 @@ def combine_texts_from_pdfs(bucket, exclude_file=None):
             all_text += text + "\n"
     return all_text
 
+# Upload a JSON object to a specified Google Cloud Storage bucket.
 def upload_json_to_bucket(json_data, bucket_name, output_filename):
     storage_client = storage.Client()
     json_bucket = storage_client.bucket(bucket_name)
@@ -100,6 +106,7 @@ def upload_json_to_bucket(json_data, bucket_name, output_filename):
     output_blob.upload_from_filename(output_json_path)
     return output_json_path
 
+# Send a file to a remote API using an HTTP POST request.
 def send_file_to_api(file_path):
     api_url = os.environ.get('API_URL')
     with open(file_path, 'rb') as file:
@@ -110,6 +117,7 @@ def send_file_to_api(file_path):
         else:
             print(f"Successfully sent file to API.")
 
+# Process a PDF file uploaded to a GCS bucket and generate a combined JSON output.
 def process_pdf_file(event, context):
     json_bucket_name = os.environ.get('JSON_BUCKET_NAME')  # Name of the new bucket
     """Triggered by a Pub/Sub message when a file is uploaded."""
@@ -153,6 +161,7 @@ def process_pdf_file(event, context):
     # Send the all.json file to the API
     send_file_to_api(output_json_path)
 
+# Handle deletion of a PDF file in GCS by regenerating combined JSON without the deleted file.
 def handle_pdf_delete(event, context):
     """Triggered by a Pub/Sub message when a PDF file is deleted."""
     deleted_file_name = event['name']
