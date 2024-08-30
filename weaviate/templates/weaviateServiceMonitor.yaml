@@ -1,0 +1,26 @@
+{{- if and .Values.env.PROMETHEUS_MONITORING_ENABLED .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: weaviate
+  labels:
+    name: weaviate
+    app: weaviate
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  jobLabel: weaviate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: weaviate
+      app.kubernetes.io/managed-by: {{ .Release.Service }}
+      monitoring: enabled
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace | quote }}
+  endpoints:
+  - targetPort: metrics
+    path: /metrics
+    interval: {{ .Values.serviceMonitor.interval }}
+    scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+{{- end }}

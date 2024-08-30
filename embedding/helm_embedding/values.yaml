@@ -1,0 +1,30 @@
+namespace: emb
+
+deployment:
+  name: text-vectorizer
+  replicaCount: 2
+  labels:
+    appName: text-vectorizer
+  container:
+    name: text-vectorizer
+    portNumber: 5000
+    args: []
+  image:
+    name: nthaiduong83/embedding_vietnamese
+    version: v1
+    imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1.5Gi
+    limits:
+      cpu: 2
+      memory: 10Gi
+
+service:
+  name: emb-svc
+  type: ClusterIP 
+  httpPort:
+    enable: true
+    port: 81
+    targetPort: 5000

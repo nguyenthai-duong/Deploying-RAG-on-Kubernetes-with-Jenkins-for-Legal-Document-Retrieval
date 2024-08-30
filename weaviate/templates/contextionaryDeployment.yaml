@@ -1,0 +1,91 @@
+{{- $module := index .Values "modules" "text2vec-contextionary" -}}
+{{ if index $module "enabled"  }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ index $module "fullnameOverride" }}
+  labels:
+    name: {{ index $module "fullnameOverride" }}
+    app: {{ index $module "fullnameOverride" }}
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ index $module "replicas" }}
+  strategy:
+{{ toYaml (index $module "strategy") | indent 4}}
+  selector:
+    matchLabels:
+      app: {{ index $module "fullnameOverride" }}
+  template:
+    metadata:
+      labels:
+        app: {{ index $module "fullnameOverride" }}
+        app.kubernetes.io/name: weaviate
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+    spec:
+      securityContext:
+{{ toYaml (index $module "securityContext") | indent 8}}
+      {{- if (index $module "serviceAccountName") }}
+      serviceAccountName: {{ index $module "serviceAccountName" }}
+      {{- else if (index .Values "serviceAccountName") }}
+      serviceAccountName: {{ index .Values "serviceAccountName" }}
+      {{- end }}
+      {{- include "image.pullSecrets" (dict "pullSecrets" (index $module "imagePullSecrets")) | nindent 6 }}
+      {{- include "pod.priorityClassName" ( dict "global" $.Values.globalPriorityClassName "priorityClassName" (index $module "priorityClassName")) | nindent 6 }}
+      containers:
+      - name: {{ index $module "fullnameOverride" }}
+        image: {{ index $module "registry" }}/{{ index $module "repo" }}:{{ index $module "tag" }}
+        imagePullPolicy: {{ index $module "imagePullPolicy" }}
+        env:
+          - name: OCCURRENCE_WEIGHT_LINEAR_FACTOR
+            value: {{ index $module "envconfig" "occurrence_weight_linear_factor" | quote }}
+          - name: EXTENSIONS_STORAGE_MODE
+            value: {{ index $module "envconfig" "extensions_storage_mode" | quote }}
+          - name: EXTENSIONS_STORAGE_ORIGIN
+            value: http://{{ .Values.service.name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}
+          - name: NEIGHBOR_OCCURRENCE_IGNORE_PERCENTILE
+            value: {{ index $module "envconfig" "neighbor_occurrence_ignore_percentile" | quote }}
+          - name: ENABLE_COMPOUND_SPLITTING
+            value: {{ index $module "envconfig" "enable_compound_splitting" | quote }}
+        resources:
+{{ index $module "resources" | toYaml | indent 10 }}
+        livenessProbe:
+          tcpSocket:
+            port: 9999
+          initialDelaySeconds: {{ index $module "livenessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $module "livenessProbe" "periodSeconds" }}
+          timeoutSeconds: {{ index $module "livenessProbe" "timeoutSeconds" }}
+        readinessProbe:
+          tcpSocket:
+            port: 9999
+          initialDelaySeconds: {{ index $module "readinessProbe" "initialDelaySeconds" }}
+          periodSeconds: {{ index $module "readinessProbe" "periodSeconds" }}
+      {{- with index $module "nodeSelector" | default .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $module "affinity" | default .Values.affinity }}
+      affinity:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with index $module "tolerations" | default .Values.tolerations }}
+      tolerations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ index $module "fullnameOverride" }}
+  labels:
+    app.kubernetes.io/name: weaviate
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ index $module "fullnameOverride" }}
+  ports:
+    - protocol: TCP
+      port: 9999
+      targetPort: 9999
+{{ end }}

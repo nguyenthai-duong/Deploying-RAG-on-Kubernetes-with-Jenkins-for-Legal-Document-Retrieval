@@ -1,0 +1,37 @@
+namespace: indexing-pipeline
+
+ingress: 
+  host: 34.126.70.146.nip.io
+
+deployment:
+  name: indexing-pipeline
+  replicaCount: 2
+  labels:
+    appName: indexing-pipeline
+  container:
+    name: i-p
+    portNumber: 8005
+    args: []
+  image:
+    name: nthaiduong83/indexing_pipeline
+    version: v12
+    imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 200Mi
+    limits:
+      cpu: 300m
+      memory: 10Gi
+
+service:
+  name: idx-svc
+  type: LoadBalancer
+  httpPort:
+    enable: true
+    port: 83
+    targetPort: 8005
+
+env:
+  WEAVIATE_URL: http://weaviate.weaviate.svc.cluster.local:85
+  VECTORIZE_URL: http://emb-svc.emb.svc.cluster.local:81/vectorize

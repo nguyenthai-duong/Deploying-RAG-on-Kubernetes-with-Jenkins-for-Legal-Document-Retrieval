@@ -1,0 +1,16 @@
+fastapi==0.110.1
+llama-index==0.10.59
+requests==2.32.3
+uvicorn==0.29.0
+weaviate-client==3.26.6
+pyvi==0.1.1
+
+opentelemetry-api==1.19.0
+opentelemetry-sdk==1.19.0
+opentelemetry-instrumentation-asgi==0.40b0
+opentelemetry-instrumentation-fastapi==0.40b0
+opentelemetry-instrumentation-requests==0.40b0
+opentelemetry-instrumentation-logging==0.40b0
+opentelemetry-exporter-jaeger==1.19.0
+opentelemetry-exporter-otlp-proto-grpc==1.19.0
+loguru==0.7.0
