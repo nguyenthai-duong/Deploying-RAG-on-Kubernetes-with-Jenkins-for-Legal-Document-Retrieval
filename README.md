@@ -29,7 +29,7 @@
 Retrieval-augmented generation (RAG) systems combine generative AI with information retrieval to provide contextualized answer generation. Building reliable and performant RAG applications at scale is challenging. In this project, I deploy a continuous and highly scalable RAG application on Google Kubernetes Engine (GKE) using CI/CD. This is my first project as a Machine Learning Engineer (MLE), and I learned from [FSDS](https://fullstackdatascience.com/). The image below shows my overall system architecture:
 ![systempipline](images/1_architecture.png)
 
-**Technology utilized**
+**Technology:**
 * Source control: Git/Github
 * CI/CD: Jenkins
 * Build API: FastAPI
@@ -40,12 +40,16 @@ Retrieval-augmented generation (RAG) systems combine generative AI with informat
 * Data Storage for vector embedding: Weaviate
 * Event trigger: Cloud Pub/Sub
 * Serverless functions response events: Google Cloud Functions
-* Ingress controller: Nginx ingress
+* Ingress controller: NGINX
 * Observable tools: Prometheus, Loki, Grafana, Jaeger
 * Deliver infrastructure as code: Ansible & Terraform
 * Cloud platform: Google Cloud Platform (GCP)
+  
+**Machine Learning Models:**
 * Embedding model: [Vietnamese Embedding Model](https://huggingface.co/dangvantuan/vietnamese-embedding)
-* Large language model: [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+* Large language model: [Vistral-7B-Chat](https://huggingface.co/Viet-Mistral/Vistral-7B-Chat) (extended from [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1))
+
+**Data Source:**
 * Data Source: [Government Documents (PDF)](https://congbao.chinhphu.vn/tai-ve-van-ban-so-08-vbhn-vpqh-40454-47126?format=pdf)
 
 **Project Structure**
@@ -394,3 +398,5 @@ When the build is complete, you will see the following:
 
 #### 2 Demo Process Query
 ![](images/27_Demoprocessquery.gif)
+
+Thank you for reading!!!
