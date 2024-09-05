@@ -7,6 +7,8 @@ import requests
 from google.cloud import storage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+json_bucket_name = os.environ.get('JSON_BUCKET_NAME')
+
 # Remove redundant spaces from the text.
 def remove_space_redundant(text):
     words = text.split()
@@ -119,7 +121,6 @@ def send_file_to_api(file_path):
 
 # Process a PDF file uploaded to a GCS bucket and generate a combined JSON output.
 def process_pdf_file(event, context):
-    json_bucket_name = os.environ.get('JSON_BUCKET_NAME')  # Name of the new bucket
     """Triggered by a Pub/Sub message when a file is uploaded."""
     pubsub_message = base64.b64decode(event['data']).decode('utf-8')
     message_data = json.loads(pubsub_message)
@@ -163,20 +164,33 @@ def process_pdf_file(event, context):
 
 # Handle deletion of a PDF file in GCS by regenerating combined JSON without the deleted file.
 def handle_pdf_delete(event, context):
-    """Triggered by a Pub/Sub message when a PDF file is deleted."""
-    deleted_file_name = event['name']
-    bucket_name = event['bucket']
+    """Triggered by a Pub/Sub message."""
+    try:
+        # Decode the Pub/Sub message
+        pubsub_message = base64.b64decode(event['data']).decode('utf-8')
+        message_data = json.loads(pubsub_message)
+        
+        # Access the bucket name and file name
+        deleted_file_name = message_data['name']
+        bucket_name = message_data['bucket']
 
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
+        print(f"Deleted file: {deleted_file_name} from bucket: {bucket_name}")
 
-    # Re-generate the all.json by processing all remaining PDFs
-    all_text = combine_texts_from_pdfs(bucket)
-    updated_json = create_chunk_json(all_text)
+        # Your existing code here to process the deletion
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
 
-    # Save updated JSON to the new bucket
-    json_bucket_name = "nthaiduong83-json-storage-bucket"  # Name of the new bucket
-    output_json_path = upload_json_to_bucket(updated_json, json_bucket_name, 'all.json')
+        # Re-generate the all.json by processing all remaining PDFs
+        all_text = combine_texts_from_pdfs(bucket)
+        updated_json = create_chunk_json(all_text)
 
-    print(f"Updated {json_bucket_name}/all.json after deleting {deleted_file_name}")
-    send_file_to_api(output_json_path)
+        # Save updated JSON to the new bucket
+        output_json_path = upload_json_to_bucket(updated_json, json_bucket_name, 'all.json')
+
+        print(f"Updated {json_bucket_name}/all.json after deleting {deleted_file_name}")
+        send_file_to_api(output_json_path)
+
+    except KeyError as e:
+        print(f"KeyError - reason: {str(e)}")
+    except Exception as e:
+        print(f"Error processing file deletion: {str(e)}")

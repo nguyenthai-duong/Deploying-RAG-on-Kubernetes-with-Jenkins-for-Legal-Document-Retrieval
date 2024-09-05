@@ -204,21 +204,11 @@ This section involves importing data from an external database into Weaviate. Fi
 ![](images/5_permission_bucket.png)
 Next, enter the following commands to set up notifications and Pub/Sub subscriptions:
 ```bash
-gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-bucket1
+gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-bucket2
 
-gcloud pubsub subscriptions create pdf-upload-subscription --topic=pdf-upload-topic
+gsutil notification create -t pdf-delete-topic -f json -e OBJECT_DELETE gs://nthaiduong83-pdf-bucket2
+
 ```
-To configure a function that processes event triggers, you need to edit `IAM & Admin` settings first. The default service account for Cloud Functions typically looks like `PROJECT_ID@appspot.gserviceaccount.com`. Ensure you accurately identify this account for your project, then follow these steps:
-
-* Open Cloud Console: Go to the Google Cloud Console.
-* Go to IAM & Admin: Find the "IAM & Admin" section from the left-hand menu.
-* Find the Cloud Functions Service Account: In the IAM list, look for the default service account for Cloud Functions (formatted as PROJECT_ID@appspot.gserviceaccount.com).
-* Assign the 'Artifact Registry Reader' Role:
-* Click on the edit icon (pencil icon) next to this service account.
-* Click "Add Another Role".
-* Search for and select the 'Artifact Registry Reader' role (roles/artifactregistry.reader).
-* Click "Save" to apply the changes.
-  
 Then, run the following commands to deploy the function to process triggers:
 
 ```bash
@@ -235,8 +225,7 @@ JSON_BUCKET_NAME="nthaiduong83-json-storage-bucket"
 
 gcloud functions deploy handle-pdf-delete \
 --runtime python310 \
---trigger-event google.storage.object.delete \
---trigger-resource nthaiduong83-pdf-bucket1 \
+--trigger-topic pdf-delete-topic \
 --entry-point handle_pdf_delete \
 --timeout 540s \
 --memory 512MB \
