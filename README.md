@@ -208,8 +208,19 @@ gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-buc
 
 gcloud pubsub subscriptions create pdf-upload-subscription --topic=pdf-upload-topic
 ```
+To configure a function that processes event triggers, you need to edit `IAM & Admin` settings first. The default service account for Cloud Functions typically looks like `PROJECT_ID@appspot.gserviceaccount.com`. Ensure you accurately identify this account for your project, then follow these steps:
 
-Before creating Google Cloud Functions on Google Cloud Platform (GCP) to handle events related to a specific Google Cloud Storage (GCS) bucket, you must update the variable `api_url="http://<external_ip_svc_NGINX>.nip.io/embed_and_import_json"` in `./data_pipeline/main.py` for importing into the `indexing-pipeline` on K8s. In my case, it is `api_url = "http://34.126.70.146.nip.io/embed_and_import_json"`:
+* Open Cloud Console: Go to the Google Cloud Console.
+* Go to IAM & Admin: Find the "IAM & Admin" section from the left-hand menu.
+* Find the Cloud Functions Service Account: In the IAM list, look for the default service account for Cloud Functions (formatted as PROJECT_ID@appspot.gserviceaccount.com).
+* Assign the 'Artifact Registry Reader' Role:
+* Click on the edit icon (pencil icon) next to this service account.
+* Click "Add Another Role".
+* Search for and select the 'Artifact Registry Reader' role (roles/artifactregistry.reader).
+* Click "Save" to apply the changes.
+  
+Then, run the following commands to deploy the function to process triggers:
+
 ```bash
 cd data_pipeline
 
