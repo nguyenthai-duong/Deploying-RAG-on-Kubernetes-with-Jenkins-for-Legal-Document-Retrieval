@@ -204,9 +204,9 @@ This section involves importing data from an external database into Weaviate. Fi
 ![](images/5_permission_bucket.png)
 Next, enter the following commands to set up notifications and Pub/Sub subscriptions:
 ```bash
-gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-bucket2
+gsutil notification create -t pdf-upload-topic -f json gs://nthaiduong83-pdf-bucket1
 
-gsutil notification create -t pdf-delete-topic -f json -e OBJECT_DELETE gs://nthaiduong83-pdf-bucket2
+gsutil notification create -t pdf-delete-topic -f json -e OBJECT_DELETE gs://nthaiduong83-pdf-bucket1
 
 ```
 Then, run the following commands to deploy the function to process triggers:
