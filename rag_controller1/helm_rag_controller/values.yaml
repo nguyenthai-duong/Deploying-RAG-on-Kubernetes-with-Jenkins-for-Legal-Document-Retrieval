@@ -14,7 +14,7 @@ deployment:
     args: []
   image:
     name: nthaiduong83/rag_controller
-    version: v17
+    version: v29
     imagePullPolicy: IfNotPresent
   resources:
     requests:

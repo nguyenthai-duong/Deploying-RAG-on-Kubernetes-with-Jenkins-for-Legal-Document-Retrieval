@@ -12,6 +12,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import get_tracer_provider, set_tracer_provider
 from opentelemetry import trace  
 import uvicorn
+import asyncio  
 
 JAEGER_HOST = os.getenv("JAEGER_HOST", "jaeger-tracing-jaeger-all-in-one.jaeger-tracing.svc.cluster.local")
 JAEGER_PORT = os.getenv("JAEGER_PORT", "6831")
@@ -48,7 +49,7 @@ app = FastAPI(
 async def health_check():
     return {"status": "ok"}
 
-def query_rag_llm(query_str, limit=3):
+async def query_rag_llm(query_str, limit=3):
     with tracer.start_as_current_span("processors") as processors_span:
 
         with tracer.start_as_current_span(
@@ -65,7 +66,7 @@ def query_rag_llm(query_str, limit=3):
             client = weaviate.Client(WEAVIATE_URL)
 
             text_data = {"text": tokenized_query}
-            response = requests.post(VECTORIZE_URL, json=text_data)
+            response = await asyncio.to_thread(requests.post, VECTORIZE_URL, json=text_data)
 
             if response.status_code == 200:
                 vec = response.json().get("vector")
@@ -74,11 +75,8 @@ def query_rag_llm(query_str, limit=3):
                 return None
 
             near_vec = {"vector": vec}
-            res = client \
-                .query.get("Document", ["content", "_additional {certainty}"]) \
-                .with_near_vector(near_vec) \
-                .with_limit(limit) \
-                .do()
+
+            res = await asyncio.to_thread(client.query.get("Document", ["content", "_additional {certainty}"]).with_near_vector(near_vec).with_limit(limit).do)
 
             context_str = []
             for document in res["data"]["Get"]["Document"]:
@@ -103,7 +101,7 @@ def query_rag_llm(query_str, limit=3):
             messages = qa_template.format_messages(context_str=context_str, query_str=query_str)
             prompt = messages[0].content
 
-            response = requests.post(
+            response = await asyncio.to_thread(requests.post, 
                 LLM_API_URL,
                 json={
                     "inputs": prompt,
@@ -126,7 +124,7 @@ def query_rag_llm(query_str, limit=3):
 
 @app.post("/query")
 async def query(query_str: str):
-    response = query_rag_llm(query_str)
+    response = await query_rag_llm(query_str)
     if response:
         return {"response": response}
     else:

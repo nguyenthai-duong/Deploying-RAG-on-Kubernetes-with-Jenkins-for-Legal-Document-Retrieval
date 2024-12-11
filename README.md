@@ -20,9 +20,10 @@
       - [3 Config Github API usage rate limiting strategy](#3-config-github-api-usage-rate-limiting-strategy)
       - [4 Create Item and Connect Jenkins to GitHub](#4-create-item-and-connect-jenkins-to-github)
       - [5 Set Up a GitHub Webhook to Automatically Deploy on Code Push](#5-set-up-a-github-webhook-to-automatically-deploy-on-code-push)
-  - [VII. Demo](#vii-demo)
+  - [VII. Demo \& Evaluate performance of system](#vii-demo--evaluate-performance-of-system)
       - [1 Demo Process Ingest Data](#1-demo-process-ingest-data)
       - [2 Demo Process Query](#2-demo-process-query)
+      - [3 Throughput \& Latency](#3-throughput--latency)
 
 
 ## I. Overview
@@ -392,11 +393,22 @@ When the build is complete, you will see the following:
 #### 5 Set Up a GitHub Webhook to Automatically Deploy on Code Push
 ![](images/25_addwebhook.gif)
 
-## VII. Demo
+## VII. Demo & Evaluate performance of system
 #### 1 Demo Process Ingest Data
 ![](images/26_Demoprocessimport.gif)
 
 #### 2 Demo Process Query
 ![](images/27_Demoprocessquery.gif)
+
+#### 3 Throughput & Latency 
+Figure below shows the throughput and latency graph of the dispatcher (as well as the system) when 100 users request at the same time.
+![](images/28_system2.png)
+
+And figure below summarizes the throughput and latency of the components and the system.
+![](images/29_system3.png)
+
+I load test components such as embedding or weaviate by using the Load Balancer service type to get the public ip, then use locust to test the load when there are 100 concurrent requests. Because I limit the CPU resources of each embedding pod, its throughput and latency are not good.
+
+ The performance of the system is limited because the LLM component is run locally with limited resources, along with the number of tokens (questions + necessary contexts) that make this component a bottleneck of the system. 
 
 Thank you for reading!!!
