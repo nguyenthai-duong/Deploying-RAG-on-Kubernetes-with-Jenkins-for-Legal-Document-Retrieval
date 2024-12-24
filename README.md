@@ -404,11 +404,6 @@ When the build is complete, you will see the following:
 Figure below shows the throughput and latency graph of the dispatcher (as well as the system) when 100 users request at the same time.
 ![](images/28_system2.png)
 
-And figure below summarizes the throughput and latency of the components and the system.
-![](images/29_system3.png)
-
-I load test components such as embedding or weaviate by using the Load Balancer service type to get the public ip, then use locust to test the load when there are 100 concurrent requests. Because I limit the CPU resources of each embedding pod, its throughput and latency are not good.
-
- The performance of the system is limited because the LLM component is run locally with limited resources, along with the number of tokens (questions + necessary contexts) that make this component a bottleneck of the system. 
+The performance of the system is limited because the LLM component is run locally with limited resources, along with the number of tokens (questions + necessary contexts) that make this component a bottleneck of the system. 
 
 Thank you for reading!!!
